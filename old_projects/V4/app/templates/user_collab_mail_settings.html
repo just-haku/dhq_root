@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <title>Collaboration Mail Settings - Chaos Plots</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='darkmode.css') }}">
+    <style>
+      body {
+        background-color: #f5f7fa;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .navbar {
+        border-bottom: 1px solid #ccc;
+      }
+      .container {
+        margin-top: 2rem;
+      }
+      .platform-price {
+        display: none;
+      }
+      .extra-field {
+        margin-bottom: 1rem;
+      }
+      /* Initially hide the cross-post price div */
+      #crossPostPriceDiv {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('user.index') }}">Chaos Plot Generator</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+                aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <li class="nav-item me-2">
+              <button id="modeToggle" class="btn btn-outline-secondary">Dark Mode</button>
+            </li>
+            <li class="nav-item me-2">
+              <button class="btn btn-secondary" onclick="window.history.back();">Back</button>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link btn btn-outline-primary" href="{{ url_for('user.index') }}">Dashboard</a>
+            </li>
+            <li class="nav-item ms-2">
+              <a class="nav-link btn btn-outline-primary" href="{{ url_for('auth.logout') }}">Logout</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+    
+    <!-- Main Container -->
+    <div class="container">
+      <h2>Collaboration Mail Settings</h2>
+      <p>
+        Please select the platforms on which you wish to collaborate and input your desired price (in $) for each.
+        If you plan to do cross-posting between TikTok and Instagram, check both and then enter the cross-posting price below.
+      </p>
+      
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      
+      <form method="post" action="{{ url_for('user.collab_mail_settings') }}">
+        <div class="mb-3">
+          <label class="form-label">Select Collaboration Platforms:</label>
+          <!-- TikTok -->
+          <div class="form-check">
+            <input class="form-check-input platform-checkbox" type="checkbox" value="TikTok" name="platform" id="platformTikTok"
+              {% if settings.TikTok is defined %} checked {% endif %}>
+            <label class="form-check-label" for="platformTikTok">TikTok</label>
+          </div>
+          <div class="mb-2 platform-price" id="priceTikTokDiv">
+            <label for="priceTikTok" class="form-label">TikTok Price:</label>
+            <input type="text" class="form-control" name="price_TikTok" id="priceTikTok" placeholder="Enter price" value="{{ settings.TikTok if settings.TikTok is defined else '' }}">
+          </div>
+          
+          <!-- Instagram -->
+          <div class="form-check">
+            <input class="form-check-input platform-checkbox" type="checkbox" value="Instagram" name="platform" id="platformInstagram"
+              {% if settings.Instagram is defined %} checked {% endif %}>
+            <label class="form-check-label" for="platformInstagram">Instagram</label>
+          </div>
+          <div class="mb-2 platform-price" id="priceInstagramDiv">
+            <label for="priceInstagram" class="form-label">Instagram Price:</label>
+            <input type="text" class="form-control" name="price_Instagram" id="priceInstagram" placeholder="Enter price" value="{{ settings.Instagram if settings.Instagram is defined else '' }}">
+          </div>
+          
+          <!-- YouTube -->
+          <div class="form-check">
+            <input class="form-check-input platform-checkbox" type="checkbox" value="YouTube" name="platform" id="platformYouTube"
+              {% if settings.YouTube is defined %} checked {% endif %}>
+            <label class="form-check-label" for="platformYouTube">YouTube</label>
+          </div>
+          <div class="mb-2 platform-price" id="priceYouTubeDiv">
+            <label for="priceYouTube" class="form-label">YouTube Price:</label>
+            <input type="text" class="form-control" name="price_YouTube" id="priceYouTube" placeholder="Enter price" value="{{ settings.YouTube if settings.YouTube is defined else '' }}">
+          </div>
+          
+          <!-- YouTube Shorts -->
+          <div class="form-check">
+            <input class="form-check-input platform-checkbox" type="checkbox" value="YouTube Shorts" name="platform" id="platformYouTubeShorts"
+              {% if settings["YouTube Shorts"] is defined %} checked {% endif %}>
+            <label class="form-check-label" for="platformYouTubeShorts">YouTube Shorts</label>
+          </div>
+          <div class="mb-2 platform-price" id="priceYouTubeShortsDiv">
+            <label for="priceYouTubeShorts" class="form-label">YouTube Shorts Price:</label>
+            <input type="text" class="form-control" name="price_YouTube Shorts" id="priceYouTubeShorts" placeholder="Enter price" value="{{ settings['YouTube Shorts'] if settings['YouTube Shorts'] is defined else '' }}">
+          </div>
+          
+          <!-- Instagram Story -->
+          <div class="form-check">
+            <input class="form-check-input platform-checkbox" type="checkbox" value="Instagram Story" name="platform" id="platformInstagramStory"
+              {% if settings["Instagram Story"] is defined %} checked {% endif %}>
+            <label class="form-check-label" for="platformInstagramStory">Instagram Story</label>
+          </div>
+          <div class="mb-2 platform-price" id="priceInstagramStoryDiv">
+            <label for="priceInstagramStory" class="form-label">Instagram Story Price:</label>
+            <input type="text" class="form-control" name="price_Instagram Story" id="priceInstagramStory" placeholder="Enter price" value="{{ settings['Instagram Story'] if settings['Instagram Story'] is defined else '' }}">
+          </div>
+          
+          <!-- Instagram Post -->
+          <div class="form-check">
+            <input class="form-check-input platform-checkbox" type="checkbox" value="Instagram Post" name="platform" id="platformInstagramPost"
+              {% if settings["Instagram Post"] is defined %} checked {% endif %}>
+            <label class="form-check-label" for="platformInstagramPost">Instagram Post</label>
+          </div>
+          <div class="mb-2 platform-price" id="priceInstagramPostDiv">
+            <label for="priceInstagramPost" class="form-label">Instagram Post Price:</label>
+            <input type="text" class="form-control" name="price_Instagram Post" id="priceInstagramPost" placeholder="Enter price" value="{{ settings['Instagram Post'] if settings['Instagram Post'] is defined else '' }}">
+          </div>
+          
+          <!-- Cross-Posting Price: Shown if both TikTok and Instagram are checked or if already set -->
+          <div class="mb-2" id="crossPostPriceDiv">
+            <label for="crossPostPrice" class="form-label">Cross-Posting Price (TikTok + Instagram):</label>
+            <input type="text" class="form-control" name="cross_post_price" id="crossPostPrice" placeholder="Enter cross-post price" value="{{ settings.cross_post if settings.cross_post is defined else '' }}">
+          </div>
+        </div>
+        
+        <!-- Extra Fields Section for Additional Options -->
+        <div class="mb-3">
+          <h5>Extra Options</h5>
+          <div id="extraFields">
+            {% if settings.extra_fields %}
+              {% for key, value in settings.extra_fields.items() %}
+                <div class="mb-2 extra-field" data-field="{{ key }}">
+                  <label class="form-label">{{ key }} Price:</label>
+                  <div class="input-group">
+                    <input type="text" class="form-control" name="extra_{{ key }}" value="{{ value }}" placeholder="Enter price">
+                    <button type="button" class="btn btn-danger remove-extra-field" data-field="{{ key }}">Remove</button>
+                  </div>
+                </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <button type="button" id="addExtraField" class="btn btn-outline-secondary">Add Extra Field</button>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+      </form>
+    </div>
+    
+    <!-- Scripts -->
+    <script>
+      // Dark Mode Toggle
+      const modeToggle = document.getElementById('modeToggle');
+      if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+        modeToggle.innerText = 'Light Mode';
+      } else {
+        modeToggle.innerText = 'Dark Mode';
+      }
+      modeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+          localStorage.setItem('darkMode', 'enabled');
+          modeToggle.innerText = 'Light Mode';
+        } else {
+          localStorage.setItem('darkMode', 'disabled');
+          modeToggle.innerText = 'Dark Mode';
+        }
+      });
+      
+      // Function to show/hide cross-posting price field if both TikTok & Instagram are checked
+      function checkCrossPostEligibility() {
+        const tikTokChecked = document.getElementById("platformTikTok").checked;
+        const instagramChecked = document.getElementById("platformInstagram").checked;
+        const crossPostDiv = document.getElementById("crossPostPriceDiv");
+        if (tikTokChecked && instagramChecked) {
+          crossPostDiv.style.display = 'block';
+        } else {
+          crossPostDiv.style.display = 'none';
+        }
+      }
+      
+      // Show/hide individual platform price inputs when toggled
+      document.querySelectorAll('.platform-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+          let platform = this.value;
+          let divId = 'price' + platform.replace(/\s+/g, '') + 'Div';
+          let priceDiv = document.getElementById(divId);
+          priceDiv.style.display = this.checked ? 'block' : 'none';
+          checkCrossPostEligibility();
+        });
+      });
+      
+      // On page load, set initial state for each platform price and cross-post field
+      window.onload = function() {
+        document.querySelectorAll('.platform-checkbox').forEach(checkbox => {
+          let platform = checkbox.value;
+          let divId = 'price' + platform.replace(/\s+/g, '') + 'Div';
+          let priceDiv = document.getElementById(divId);
+          if (checkbox.checked) {
+            priceDiv.style.display = 'block';
+          }
+        });
+        // Show cross-post price field if both TikTok and Instagram are checked or if already set
+        {% if settings.cross_post is defined and settings.cross_post != '' %}
+          document.getElementById("crossPostPriceDiv").style.display = 'block';
+        {% else %}
+          checkCrossPostEligibility();
+        {% endif %}
+      };
+      
+      // Extra Field removal functionality
+      function attachRemoveEvents() {
+        document.querySelectorAll('.remove-extra-field').forEach(button => {
+          button.onclick = function() {
+            let parentDiv = this.closest('.extra-field');
+            if (parentDiv) {
+              parentDiv.remove();
+            }
+          };
+        });
+      }
+      attachRemoveEvents();
+      
+      // Add Extra Field functionality
+      document.getElementById("addExtraField").addEventListener("click", function() {
+        let fieldName = prompt("Enter the name for the extra field (e.g., Bundle of 3 Videos):");
+        if (fieldName) {
+          // Create a new div for the extra field.
+          let div = document.createElement("div");
+          div.className = "mb-2 extra-field";
+          div.setAttribute("data-field", fieldName);
+          div.innerHTML = `
+            <label class="form-label">${fieldName} Price:</label>
+            <div class="input-group">
+              <input type="text" class="form-control" name="extra_${fieldName}" placeholder="Enter price">
+              <button type="button" class="btn btn-danger remove-extra-field" data-field="${fieldName}">Remove</button>
+            </div>
+          `;
+          document.getElementById("extraFields").appendChild(div);
+          attachRemoveEvents();
+        }
+      });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

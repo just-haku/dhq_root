@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <title>Link Gmail Account - Chaos Plots</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='darkmode.css') }}">
+    <style>
+      body {
+        background-color: #f5f7fa;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .navbar {
+        border-bottom: 1px solid #ccc;
+      }
+      .container {
+        margin-top: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('user.index') }}">Chaos Plot Generator</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+                aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <li class="nav-item me-2">
+              <button id="modeToggle" class="btn btn-outline-secondary">Dark Mode</button>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link btn btn-outline-primary" href="{{ url_for('auth.logout') }}">Logout</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+    
+    <!-- Main Container -->
+    <div class="container">
+      <!-- Navigation Buttons: Back and Dashboard -->
+      <div class="d-flex justify-content-between my-3">
+        <button class="btn btn-secondary" onclick="window.history.back();">Back</button>
+        <a href="{{ url_for('user.index') }}" class="btn btn-primary">Dashboard</a>
+      </div>
+      
+      <div class="row justify-content-center">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h4>Link Your Gmail Account</h4>
+            </div>
+            <div class="card-body">
+              {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                  {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                      {{ message }}
+                      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                  {% endfor %}
+                {% endif %}
+              {% endwith %}
+              <form method="post" action="{{ url_for('user.link_gmail') }}">
+                <div class="mb-3">
+                  <label for="gmailAddress" class="form-label">Gmail Address</label>
+                  <input type="email" class="form-control" id="gmailAddress" name="gmail_address"
+                         placeholder="your-email@gmail.com" required
+                         value="{{ user.gmail_address if user and user.gmail_address is defined else '' }}">
+                </div>
+                <div class="mb-3">
+                  <label for="appPassword" class="form-label">App Password</label>
+                  <input type="password" class="form-control" id="appPassword" name="app_password" required>
+                  <div class="form-text">Enter your application-specific password for Gmail. (Leave blank if you do not wish to change it.)</div>
+                </div>
+                <button type="submit" class="btn btn-primary">Update Gmail Credentials</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Dark Mode Toggle Script -->
+    <script>
+      const modeToggle = document.getElementById('modeToggle');
+      if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+        modeToggle.innerText = 'Light Mode';
+      } else {
+        modeToggle.innerText = 'Dark Mode';
+      }
+      
+      modeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+          localStorage.setItem('darkMode', 'enabled');
+          modeToggle.innerText = 'Light Mode';
+        } else {
+          localStorage.setItem('darkMode', 'disabled');
+          modeToggle.innerText = 'Dark Mode';
+        }
+      });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

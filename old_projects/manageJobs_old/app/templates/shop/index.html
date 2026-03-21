@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold text-warning mb-0"><i class="fas fa-store me-2"></i>Item Shop</h2>
+        <p class="text-muted small mb-0">Spend your hard-earned KPI on style upgrades.</p>
+    </div>
+    <div class="text-end">
+        <div class="fs-4 fw-bold text-warning">{{ current_user.kpi }} <small class="fs-6 text-muted">KPI</small></div>
+        <div class="small text-muted">Current Balance</div>
+    </div>
+</div>
+
+<!-- OPERATOR TOOLS -->
+{% if current_user.role == 'operator' %}
+<div class="card bg-dark border-warning mb-4">
+    <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#opTools" style="cursor:pointer">
+        <span><i class="fas fa-tools me-2"></i>Operator Tools</span>
+        <i class="fas fa-chevron-down"></i>
+    </div>
+    <div id="opTools" class="collapse">
+        <div class="card-body">
+            <div class="row g-4">
+                <!-- CREATION FORM -->
+                <div class="col-md-8">
+                    <h6 class="mb-2">Create New Item</h6>
+                    
+                    <form id="createItemForm" class="row g-2">
+                        <!-- BASIC INFO -->
+                        <div class="col-md-3">
+                            <label class="small text-muted">Type</label>
+                            <select name="type" id="itemType" class="form-select form-select-sm" onchange="updateFormType()">
+                                <option value="namecard">Namecard</option>
+                                <option value="title">Title</option>
+                                <option value="background">Background</option>
+                                <option value="avatar_frame">Avatar Frame</option>
+                                <option value="banner_frame">Banner Frame</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="small text-muted">Internal Name</label>
+                            <input type="text" name="name" id="itemName" class="form-control form-control-sm" required oninput="updatePreview()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="small text-muted">Price</label>
+                            <input type="number" name="price" class="form-control form-control-sm" required value="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="small text-muted">Discount %</label>
+                            <input type="number" name="discount" class="form-control form-control-sm" value="0">
+                        </div>
+                        
+                        <div class="col-12">
+                            <input type="text" name="description" class="form-control form-control-sm" placeholder="Description">
+                        </div>
+
+                        <!-- DYNAMIC INPUTS -->
+                        <div class="col-12 d-none" id="titleTextInput">
+                            <label class="small text-muted">Title Content</label>
+                            <input type="text" name="title_content" id="titleContent" class="form-control form-control-sm" placeholder="e.g. THE KING" oninput="updatePreview()">
+                        </div>
+
+                        <!-- FILE UPLOAD -->
+                        <div class="col-12" id="fileInputContainer">
+                            <label class="small text-muted">Upload Image</label>
+                            <input type="file" name="file" id="itemFile" class="form-control form-control-sm" onchange="previewFile()">
+                        </div>
+                        
+                        <!-- STYLE STUDIO CONTAINER -->
+                        <div class="col-12 d-none" id="colorInputContainer">
+                            <div class="card bg-black border-secondary p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <small class="text-muted fw-bold">PRO STYLE STUDIO</small>
+                                    <!-- Hidden Input for submission -->
+                                    <input type="hidden" name="css_value" id="itemCss">
+                                </div>
+                                
+                                <div class="row g-2 align-items-center">
+                                    <!-- Color 1 -->
+                                    <div class="col-md-6 d-flex gap-2 align-items-center">
+                                        <input type="color" id="color1" class="form-control form-control-color form-control-sm p-0" value="#ff0000" oninput="updateStyle()">
+                                        <div class="flex-grow-1">
+                                            <label class="x-small text-muted mb-0">Color 1 & Opacity</label>
+                                            <input type="range" id="alpha1" class="form-range" min="0" max="100" value="100" oninput="updateStyle()">
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Color 2 -->
+                                    <div class="col-md-6 d-flex gap-2 align-items-center">
+                                        <input type="color" id="color2" class="form-control form-control-color form-control-sm p-0" value="#0000ff" oninput="updateStyle()">
+                                        <div class="flex-grow-1">
+                                            <label class="x-small text-muted mb-0">Color 2 & Opacity</label>
+                                            <input type="range" id="alpha2" class="form-range" min="0" max="100" value="100" oninput="updateStyle()">
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Type -->
+                                    <div class="col-md-4">
+                                        <label class="x-small text-muted">Animation Action</label>
+                                        <select id="animAction" class="form-select form-select-sm bg-secondary text-white border-0" onchange="updateStyle()">
+                                            <option value="none">Static (No Animation)</option>
+                                            <option value="spin">Spin (Cycle Around)</option>
+                                            <option value="flow">1 Way (Flow)</option>
+                                            <option value="pingpong">2 Ways (Ping Pong)</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Direction -->
+                                    <div class="col-md-4">
+                                        <label class="x-small text-muted">Direction (for Flow/Static)</label>
+                                        <select id="animDirection" class="form-select form-select-sm bg-secondary text-white border-0" onchange="updateStyle()">
+                                            <option value="right">To Right (->)</option>
+                                            <option value="left">To Left (<-)</option>
+                                            <option value="bottom">Top Down (v)</option>
+                                            <option value="top">Bottom Up (^)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Border/Width -->
+                                    <div class="col-md-4">
+                                        <label class="x-small text-muted">Border Thickness</label>
+                                        <input type="number" id="borderWidth" class="form-control form-control-sm bg-secondary text-white border-0" value="4" min="1" max="10" oninput="updateStyle()">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12 mt-3">
+                            <button type="button" onclick="createItem()" class="btn btn-sm btn-warning w-100 fw-bold">Create Item</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- LIVE PREVIEW -->
+                <div class="col-md-4 border-start border-secondary">
+                    <h6 class="text-center mb-3">Preview</h6>
+                    <div class="d-flex justify-content-center align-items-center position-relative overflow-visible bg-dark border border-secondary rounded" 
+                         style="height: 150px;" id="previewContainer">
+                        <span class="text-muted small">Item Preview</span>
+                    </div>
+                    
+                    <div class="mt-4 pt-3 border-top border-secondary">
+                        <h6 class="mb-2">Give KPI</h6>
+                        <div class="input-group input-group-sm">
+                            <select id="targetId" class="form-select" style="max-width: 120px;">
+                                <option value="" selected disabled>User...</option>
+                                {% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}
+                            </select>
+                            <input type="number" id="amount" class="form-control" placeholder="Amt">
+                            <button onclick="giveKpi()" class="btn btn-success">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- NEW CARD LAYOUT GRID -->
+<div class="row g-4">
+    {% for item in items %}
+    <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="card h-100 bg-dark border-secondary shadow-sm position-relative overflow-hidden">
+            
+            <!-- 1. PREVIEW AREA (Clean, no overlays) -->
+            <div class="ratio ratio-16x9 bg-transparent border-bottom border-secondary d-flex align-items-center justify-content-center overflow-visible">
+                {% if item.type == 'title' %}
+                    <span class="badge border rounded-pill px-3 py-2 fs-6 shadow" 
+                          style="background: {{ item.resource_url if 'http' not in item.resource_url and '/' not in item.resource_url else 'url(' + item.resource_url + ')' }}; 
+                                 color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+                        {{ item.title_content or item.name }}
+                    </span>
+                {% elif item.type == 'avatar_frame' %}
+                    <!-- Preview logic for frames -->
+                    <div style="width: 64px; height: 64px; position: relative;">
+                        <div class="bg-secondary rounded-circle w-100 h-100 border border-2 border-dark"></div>
+                        {{ render_frame(item.resource_url, 'avatar') }}
+                    </div>
+                {% elif item.type == 'banner_frame' %}
+                    <div style="width: 80%; height: 60%; position: relative; background: #333; border-radius: 8px;">
+                        {{ render_frame(item.resource_url, 'banner') }}
+                    </div>
+                {% else %}
+                    <img src="{{ item.resource_url }}" class="object-fit-contain w-100 h-100" onerror="this.src='{{ url_for('static', filename='images/placeholder.png') }}'">
+                {% endif %}
+                
+                {% if not item.is_active %}
+                <div class="position-absolute top-0 start-0 badge bg-danger m-2 shadow">HIDDEN</div>
+                {% endif %}
+            </div>
+
+            <!-- 2. INFO PANEL (Relocated) -->
+            <div class="card-body d-flex flex-column p-3 bg-body-tertiary">
+                <!-- Row 1: Type | Price -->
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="text-uppercase text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 1px;">{{ item.type|replace('_', ' ') }}</small>
+                    
+                    {% set final_price = (item.price * (1 - item.discount/100))|int if item.discount > 0 else item.price %}
+                    <div>
+                        {% if item.discount > 0 %}
+                        <small class="text-danger text-decoration-line-through x-small me-1">{{ item.price }}</small>
+                        {% endif %}
+                        <span class="badge bg-warning text-dark fw-bold">{{ final_price }} KPI</span>
+                    </div>
+                </div>
+
+                <!-- Row 2: Name -->
+                <h6 class="fw-bold text-white mb-1 text-truncate" title="{{ item.name }}">{{ item.name }}</h6>
+
+                <!-- Row 3: Description -->
+                <p class="text-secondary small mb-3 flex-grow-1 line-clamp-2" style="min-height: 2.5em;">
+                    {{ item.description or 'No description provided.' }}
+                </p>
+
+                <!-- Row 4: Action Button -->
+                <div class="mt-auto">
+                    {% if item.id in owned_ids %}
+                        <button class="btn btn-sm btn-outline-success w-100 disabled border-success">
+                            <i class="fas fa-check-circle me-1"></i> Owned
+                        </button>
+                    {% else %}
+                        <button class="btn btn-sm btn-primary w-100 fw-bold" 
+                                onclick="openBuyModal(this)" 
+                                data-id="{{ item.id }}" 
+                                data-name="{{ item.name }}" 
+                                data-price="{{ final_price }}"
+                                {{ 'disabled' if not item.is_active and current_user.role != 'operator' else '' }}>
+                            BUY NOW
+                        </button>
+                    {% endif %}
+                </div>
+                
+                {% if current_user.role == 'operator' %}
+                <div class="mt-2 text-center border-top border-secondary pt-2">
+                    <button class="btn btn-link btn-sm text-muted p-0 text-decoration-none" 
+                            onclick="openEditModal({{ item.id }}, '{{ item.name }}', {{ item.price }}, '{{ item.description }}', '{{ item.is_active }}', '{{ item.title_content or '' }}')">
+                        <small><i class="fas fa-pen"></i> Edit Item</small>
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12 text-center py-5 text-muted"><i class="fas fa-ghost fa-3x mb-3 opacity-25"></i><p>The shop is empty.</p></div>
+    {% endfor %}
+</div>
+
+<!-- MODALS (Preserved) -->
+<div class="modal fade" id="buyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content bg-dark text-white border-warning">
+            <div class="modal-header border-secondary py-2"><h6 class="modal-title text-warning">Confirm Purchase</h6></div>
+            <div class="modal-body text-center">
+                <p class="small text-muted mb-1">Buying item:</p>
+                <h5 class="fw-bold text-white" id="buyItemName">...</h5>
+                <div class="badge bg-warning text-dark mt-2 px-3"><span id="buyItemPrice">0</span> KPI</div>
+                <div id="kpiWarning" class="text-danger x-small mt-2 d-none fw-bold">Insufficient KPI!</div>
+            </div>
+            <div class="modal-footer border-secondary p-2 justify-content-center">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold" id="confirmBuyBtn" onclick="executeBuy()">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary"><h5 class="modal-title">Edit Item</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="editItemForm">
+                    <input type="hidden" name="item_id" id="editId">
+                    <div class="row g-2">
+                        <div class="col-8 mb-2"><label class="x-small text-muted">Name</label><input type="text" name="name" id="editName" class="form-control bg-secondary text-white border-0"></div>
+                        <div class="col-4 mb-2"><label class="x-small text-muted">Price</label><input type="number" name="price" id="editPrice" class="form-control bg-secondary text-white border-0"></div>
+                        <div class="col-4 mb-2"><label class="x-small text-muted">Discount %</label><input type="number" name="discount" id="editDiscount" class="form-control bg-secondary text-white border-0" value="0"></div>
+                        <div class="col-8 mb-2"><label class="x-small text-muted">Title Content</label><input type="text" name="title_content" id="editTitleContent" class="form-control bg-secondary text-white border-0"></div>
+                        <div class="col-12 mb-2"><label class="x-small text-muted">Description</label><textarea name="description" id="editDesc" class="form-control bg-secondary text-white border-0" rows="2"></textarea></div>
+                    </div>
+                </form>
+                <div class="d-flex justify-content-between border-top border-secondary pt-3 mt-3">
+                    <button id="btnToggle" onclick="toggleItem()" class="btn btn-outline-light flex-grow-1 me-2"></button>
+                    <button onclick="deleteItem()" class="btn btn-outline-danger"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-success" onclick="saveEdit()">Save</button></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.form-control-color { cursor: pointer; }
+</style>
+
+<script>
+function updateFormType() {
+    const type = document.getElementById('itemType').value;
+    const fileContainer = document.getElementById('fileInputContainer');
+    const colorContainer = document.getElementById('colorInputContainer');
+    const titleInput = document.getElementById('titleTextInput');
+    
+    if (type === 'namecard') {
+        fileContainer.classList.remove('d-none');
+        colorContainer.classList.add('d-none');
+        titleInput.classList.add('d-none');
+    } else if (type === 'title') {
+        fileContainer.classList.add('d-none');
+        colorContainer.classList.remove('d-none');
+        titleInput.classList.remove('d-none');
+    } else {
+        fileContainer.classList.remove('d-none');
+        colorContainer.classList.remove('d-none');
+        titleInput.classList.add('d-none');
+    }
+    updatePreview();
+}
+
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha / 100})`;
+}
+
+function updateStyle() {
+    const c1 = document.getElementById('color1').value;
+    const a1 = document.getElementById('alpha1').value;
+    const c2 = document.getElementById('color2').value;
+    const a2 = document.getElementById('alpha2').value;
+    
+    const rgba1 = hexToRgba(c1, a1);
+    const rgba2 = hexToRgba(c2, a2);
+    
+    const action = document.getElementById('animAction').value;
+    const direction = document.getElementById('animDirection').value;
+    const borderW = document.getElementById('borderWidth').value;
+    const type = document.getElementById('itemType').value;
+    
+    let css = '';
+    
+    if (action === 'spin') {
+        // SPIN (Conic Gradient)
+        // Repeats color 1 at end to make seamless loop
+        css = `background: conic-gradient(from 0deg, ${rgba1}, ${rgba2}, ${rgba1}); animation: anim-spin-static 4s linear infinite;`;
+    } else {
+        // FLOW / PINGPONG / STATIC (Linear)
+        let dirCss = 'to right';
+        if (direction === 'left') dirCss = 'to left';
+        if (direction === 'bottom') dirCss = 'to bottom';
+        if (direction === 'top') dirCss = 'to top';
+        
+        css = `background: linear-gradient(${dirCss}, ${rgba1}, ${rgba2});`;
+        
+        if (action === 'flow' || action === 'pingpong') {
+            css += ` background-size: 200% 200%; animation: ${direction === 'bottom' || direction === 'top' ? 'anim-flow-y' : 'anim-flow'} 3s linear infinite;`;
+            
+            if (action === 'pingpong') {
+                css = css.replace('infinite', 'infinite alternate');
+            }
+        }
+    }
+    
+    // Apply Frame Specifics (Border logic)
+    if (type.includes('frame')) {
+        // For frames, we use border logic. 
+        // The "background" we generated above needs to be applied to border-image or a pseudo element simulation.
+        // Simpler approach for this UI: apply it to border-color via valid css trick or just use it as background of the frame div.
+        // Since our frames are DIVs in base.html, we can just set background + border-radius.
+        // But we need a hollow center.
+        // Trick: background-clip: padding-box, border-box
+        
+        // Let's simply apply the gradient to the background of the frame element
+        // and rely on the frame element being a "ring" or behind content.
+        // In base.html, frames are: 
+        // 1. Avatar frame: div.avatar-frame { position: absolute; ... z-index: 20; }
+        //    We need it to be a BORDER.
+        //    Solution: transparent border + background-origin border-box.
+        
+        let solidCss = css;
+        css = `border: ${borderW}px solid transparent; ` + solidCss + ` background-clip: border-box; -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;`;
+        
+        // Fallback for simple support without masks (easier for embedded):
+        // Just set the background and a clip path or make the inner part transparent?
+        // Simplest robust way for "border gradient":
+        // Use the generated gradient as the background, and set a mask.
+        // OR: Just use border-image (but border-image doesn't support transition/animation well on all browsers).
+        
+        // LET'S STICK TO A SIMPLER METHOD FOR ROBUSTNESS:
+        // We generated `background: ...`. We will use that on the DIV. 
+        // The div needs to be a DONUT.
+        // We can achieve this by having a transparent center?
+        // `mask: radial-gradient(farthest-side, transparent calc(100% - ${borderW}px), black calc(100% - ${borderW}px));`
+        // This creates a hole.
+        
+        css += ` mask: radial-gradient(farthest-side, transparent calc(100% - ${borderW}px), black calc(100% - ${borderW}px)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - ${borderW}px), black calc(100% - ${borderW}px));`;
+    }
+    
+    document.getElementById('itemCss').value = css;
+    updatePreview();
+}
+
+function updatePreview() {
+    const type = document.getElementById('itemType').value;
+    const container = document.getElementById('previewContainer');
+    const css = document.getElementById('itemCss').value; // Calculated CSS
+    const fileInput = document.getElementById('itemFile');
+    
+    container.innerHTML = '';
+    
+    // 1. File Preview
+    if (fileInput.files && fileInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            container.innerHTML = `<img src="${e.target.result}" class="w-100 h-100 object-fit-contain">`;
+        }
+        reader.readAsDataURL(fileInput.files[0]);
+        return;
+    }
+
+    // 2. CSS Preview
+    if (type === 'avatar_frame') {
+        container.innerHTML = `
+            <div style="width: 80px; height: 80px; position: relative; display: flex; align-items: center; justify-content: center;">
+                <div class="bg-secondary rounded-circle" style="width: 60px; height: 60px;"></div>
+                <div style="position: absolute; top:0; left:0; width: 100%; height: 100%; border-radius: 50%; ${css}"></div>
+            </div>
+        `;
+    } else if (type === 'banner_frame') {
+        container.innerHTML = `
+            <div style="width: 200px; height: 120px; position: relative; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 12px;">
+                <span class="text-muted x-small">Card</span>
+                <div style="position: absolute; top: -10px; left: -10px; width: calc(100% + 20px); height: calc(100% + 20px); border-radius: 16px; pointer-events: none; ${css}"></div>
+            </div>
+        `;
+    } else if (type === 'title') {
+        const text = document.getElementById('titleContent').value || 'TITLE';
+        container.innerHTML = `<span class="badge border rounded-pill px-3 py-2 fs-6 shadow" style="${css} color:white;">${text}</span>`;
+    } else {
+        container.innerHTML = `<div style="width:100%; height:100%; ${css}"></div>`;
+    }
+}
+
+function previewFile() { updatePreview(); }
+
+// --- BUY/EDIT LOGIC (Preserved) ---
+let pendingBuyId = null;
+function openBuyModal(btn) {
+    const myKpi = {{ current_user.kpi }};
+    const cost = parseInt(btn.dataset.price);
+    pendingBuyId = btn.dataset.id;
+    
+    document.getElementById('buyItemName').innerText = btn.dataset.name;
+    document.getElementById('buyItemPrice').innerText = cost;
+    
+    const warn = document.getElementById('kpiWarning');
+    const confirmBtn = document.getElementById('confirmBuyBtn');
+    
+    if (myKpi < cost) {
+        warn.classList.remove('d-none');
+        confirmBtn.innerText = "Insufficient KPI";
+    } else {
+        warn.classList.add('d-none');
+        confirmBtn.innerText = "Confirm";
+        confirmBtn.disabled = false;
+    }
+    new bootstrap.Modal(document.getElementById('buyModal')).show();
+}
+
+async function executeBuy() {
+    if (!pendingBuyId) return;
+    const res = await fetch(`/shop/buy/${pendingBuyId}`, {method:'POST'});
+    const data = await res.json();
+    if(data.status === 'ok') { location.reload(); }
+    else { alert(data.msg); }
+}
+
+async function createItem() {
+    const form = document.getElementById('createItemForm');
+    const fd = new FormData(form);
+    const res = await fetch('/shop/create_item', {method:'POST', body:fd});
+    if(res.ok) { form.reset(); location.reload(); } else { alert("Failed"); }
+}
+
+let currentEditId = null;
+function openEditModal(id, name, price, desc, isActive, titleContent) {
+    currentEditId = id;
+    document.getElementById('editId').value = id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editPrice').value = price;
+    document.getElementById('editDesc').value = desc === 'None' ? '' : desc;
+    document.getElementById('editTitleContent').value = titleContent;
+    const btn = document.getElementById('btnToggle');
+    if (isActive === 'True') { btn.innerHTML = '<i class="fas fa-eye-slash me-2"></i> Hide'; btn.className = 'btn btn-outline-warning flex-grow-1 me-2'; } 
+    else { btn.innerHTML = '<i class="fas fa-eye me-2"></i> Show'; btn.className = 'btn btn-outline-success flex-grow-1 me-2'; }
+    new bootstrap.Modal(document.getElementById('editItemModal')).show();
+}
+async function saveEdit() { const fd = new FormData(document.getElementById('editItemForm')); const res = await fetch(`/shop/edit_item/${currentEditId}`, {method:'POST', body:fd}); if(res.ok) location.reload(); }
+async function toggleItem() { const res = await fetch(`/shop/toggle_item/${currentEditId}`, {method:'POST'}); if(res.ok) location.reload(); }
+async function deleteItem() { if(!confirm("Delete?")) return; const res = await fetch(`/shop/delete_item/${currentEditId}`, {method:'POST'}); if(res.ok) location.reload(); }
+async function giveKpi() { const uid = document.getElementById('targetId').value; const amt = document.getElementById('amount').value; if (!uid || !amt) return; const res = await fetch('/shop/give_kpi', { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id: uid, amount: amt}) }); if(res.ok) location.reload(); }
+</script>
+{% endblock %}

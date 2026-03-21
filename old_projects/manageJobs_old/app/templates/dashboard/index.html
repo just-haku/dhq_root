@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- HEADER -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold text-primary mb-0">Overview</h2>
+</div>
+
+<div class="row g-4">
+    <!-- COLUMN 1: TASKS -->
+    <div class="col-lg-4 col-md-12">
+        <div class="card h-100 shadow-sm border-0 bg-body-tertiary">
+            <div class="card-header bg-transparent border-bottom-0 d-flex justify-content-between align-items-center">
+                <!-- Link logic: Only Admins go to Manager, Users stay here -->
+                <a href="{{ url_for('admin.tasks') if current_user.role in ['admin', 'operator'] else '#' }}" 
+                   class="text-decoration-none fw-bold text-body hover-text-primary {{ 'cursor-default' if current_user.role not in ['admin', 'operator'] else '' }}">
+                    <i class="fas fa-check-square me-2"></i> My Tasks
+                </a>
+                <span class="badge bg-primary rounded-pill">{{ tasks|length }}</span>
+            </div>
+            <div class="card-body p-0 d-flex flex-column">
+                <ul class="list-group list-group-flush bg-transparent flex-grow-1 overflow-auto" style="max-height: 300px;">
+                    {% for t in tasks %}
+                    <li class="list-group-item bg-transparent d-flex gap-2 align-items-center border-bottom-0">
+                        <a href="{{ url_for('dashboard.toggle_task', id=t.id) }}" class="text-decoration-none text-{{ 'success' if t.is_done else 'secondary' }}">
+                            <i class="far fa-{{ 'check-circle' if t.is_done else 'circle' }}"></i>
+                        </a>
+                        <span class="{{ 'text-decoration-line-through text-muted' if t.is_done else '' }} small">{{ t.content }}</span>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item bg-transparent text-muted small text-center py-4">No pending tasks</li>
+                    {% endfor %}
+                </ul>
+                <form action="{{ url_for('dashboard.add_task') }}" method="POST" class="p-3 border-top border-secondary-subtle">
+                    <div class="input-group input-group-sm">
+                        <input type="text" name="content" class="form-control" placeholder="Add task..." required>
+                        <button class="btn btn-outline-primary"><i class="fas fa-plus"></i></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- COLUMN 2: MEDIA CENTER -->
+    <div class="col-lg-4 col-md-12">
+        <div class="card h-100 shadow-sm border-0 bg-body-tertiary">
+            <div class="card-header bg-transparent border-bottom-0">
+                <a href="{{ url_for('media.gallery') }}" class="text-decoration-none fw-bold text-body hover-text-primary">
+                    <i class="fas fa-images me-2"></i> Recent Uploads
+                </a>
+            </div>
+            <div class="card-body p-3 overflow-auto" style="max-height: 450px;">
+                
+                <!-- SECTION 1: ROOT MEDIA (Thumbnails) -->
+                <h6 class="text-uppercase text-muted x-small fw-bold mb-2">Recent Media</h6>
+                <div class="row g-2 mb-4">
+                    {% for m in root_media %}
+                    <div class="col-4">
+                        <div class="ratio ratio-1x1 rounded overflow-hidden border border-secondary cursor-pointer hover-scale" 
+                             onclick="openDashboardLightbox({{ m.id }})">
+                            {% if m.file_type == 'video' %}
+                                <img src="/media/thumb/{{ m.id }}" class="w-100 h-100 object-fit-cover" onerror="this.src='{{ url_for('static', filename='images/placeholder.png') }}'">
+                                <div class="position-absolute center-icon text-white"><i class="fas fa-play small"></i></div>
+                            {% else %}
+                                <img src="/media/stream/{{ m.id }}" class="w-100 h-100 object-fit-cover" onerror="this.src='{{ url_for('static', filename='images/placeholder.png') }}'">
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-12 text-center text-muted small py-2">No recent files in root</div>
+                    {% endfor %}
+                </div>
+
+                <!-- SECTION 2: GALLERY UPDATES (Expandable Folders) -->
+                <h6 class="text-uppercase text-muted x-small fw-bold mb-2">Recent Updates</h6>
+                <div class="d-flex flex-column gap-2">
+                    {% for g in gallery_updates %}
+                    <div class="card bg-dark-subtle border-0 folder-item">
+                        <div class="card-body p-2 d-flex align-items-center gap-3 cursor-pointer" onclick="toggleFolderPreview({{ g.id }}, this)">
+                            <!-- Folder Avatar -->
+                            <img src="{{ g.avatar or url_for('static', filename='images/placeholder.png') }}" class="rounded-circle border" width="40" height="40" style="object-fit:cover;">
+                            <div class="flex-grow-1">
+                                <div class="fw-bold small">{{ g.name }}</div>
+                                <div class="x-small text-muted">Click to expand</div>
+                            </div>
+                            <i class="fas fa-chevron-down text-muted transition-icon"></i>
+                        </div>
+                    </div>
+                    <!-- EXPANDABLE AREA (Hidden by default) -->
+                    <div id="folder-preview-{{ g.id }}" class="folder-preview-container d-none p-2 bg-black rounded-bottom mb-2">
+                        <div class="text-center text-muted small"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted small py-2">No active galleries</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- COLUMN 3: CHAT -->
+    <div class="col-lg-4 col-md-12">
+        <div class="card h-100 shadow-sm border-0 bg-body-tertiary">
+            <div class="card-header bg-transparent border-bottom-0">
+                <a href="{{ url_for('dashboard.chat') }}" class="text-decoration-none fw-bold text-body hover-text-primary">
+                    <i class="fas fa-comments me-2"></i> Team Chat
+                </a>
+            </div>
+            <div class="card-body d-flex flex-column justify-content-center align-items-center text-muted" style="min-height: 200px;">
+                <i class="fas fa-comments fa-3x mb-3 opacity-50"></i>
+                <p class="small">Chat module is under construction.</p>
+                <a href="{{ url_for('dashboard.chat') }}" class="btn btn-sm btn-outline-secondary">Open Placeholder</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DASHBOARD LIGHTBOX -->
+<div id="dash-lightbox" class="lightbox-backdrop" style="display: none;">
+    <button class="btn-close btn-close-white position-fixed top-0 end-0 m-4 p-2 z-50" onclick="closeDashLightbox()"></button>
+    
+    <div class="container h-100 d-flex flex-column justify-content-center">
+        <div class="row justify-content-center h-75">
+            <div class="col-lg-8 col-12 position-relative d-flex align-items-center justify-content-center bg-black rounded shadow-lg overflow-hidden p-0">
+                <div id="dash-lb-content" class="w-100 h-100 d-flex align-items-center justify-content-center"></div>
+                
+                <!-- Info Overlay -->
+                <div class="position-absolute bottom-0 start-0 w-100 p-3 text-white" style="background: linear-gradient(transparent, rgba(0,0,0,0.9));">
+                    <h5 id="dash-lb-filename" class="text-truncate mb-1"></h5>
+                    <div class="d-flex gap-3 small">
+                        <span><i class="fas fa-heart text-danger"></i> <span id="dash-lb-reacts">0</span></span>
+                        <span><i class="fas fa-comment text-info"></i> <span id="dash-lb-comments">0</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.hover-text-primary:hover { color: var(--bs-primary) !important; }
+.cursor-pointer { cursor: pointer; }
+.hover-scale { transition: transform 0.2s; }
+.hover-scale:hover { transform: scale(1.05); }
+.center-icon { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.transition-icon { transition: transform 0.3s; }
+.rotate-180 { transform: rotate(180deg); }
+.lightbox-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); z-index: 9999; }
+.folder-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+.cursor-default { cursor: default; }
+</style>
+
+<script>
+// --- FOLDER EXPANSION ---
+async function toggleFolderPreview(groupId, headerEl) {
+    const container = document.getElementById(`folder-preview-${groupId}`);
+    const icon = headerEl.querySelector('.fa-chevron-down');
+    
+    if (container.classList.contains('d-none')) {
+        // Expand
+        container.classList.remove('d-none');
+        icon.classList.add('rotate-180');
+        
+        // Fetch Content
+        const res = await fetch(`/dashboard/folder_preview/${groupId}`);
+        const data = await res.json();
+        
+        if (data.status === 'ok' && data.files.length > 0) {
+            let html = '<div class="folder-preview-grid">';
+            data.files.forEach(f => {
+                let thumbUrl = f.file_type === 'video' ? `/media/thumb/${f.id}` : `/media/stream/${f.id}`;
+                html += `
+                    <div class="ratio ratio-1x1 bg-secondary rounded overflow-hidden cursor-pointer position-relative" onclick="openDashboardLightbox(${f.id})">
+                        <img src="${thumbUrl}" class="w-100 h-100 object-fit-cover" onerror="this.src='{{ url_for('static', filename='images/placeholder.png') }}'">
+                        ${f.file_type === 'video' ? '<div class="position-absolute center-icon text-white"><i class="fas fa-play x-small"></i></div>' : ''}
+                        <div class="position-absolute bottom-0 start-0 w-100 p-1 text-white x-small" style="background:rgba(0,0,0,0.6)">
+                            <i class="fas fa-heart"></i> ${f.reactions_count}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="text-center text-muted small py-2">Folder empty</div>';
+        }
+    } else {
+        // Collapse
+        container.classList.add('d-none');
+        icon.classList.remove('rotate-180');
+    }
+}
+
+// --- LIGHTBOX ---
+async function openDashboardLightbox(id) {
+    const lb = document.getElementById('dash-lightbox');
+    const content = document.getElementById('dash-lb-content');
+    
+    lb.style.display = 'block';
+    content.innerHTML = '<div class="spinner-border text-primary"></div>';
+    
+    const res = await fetch(`/media/details/${id}`);
+    const data = await res.json();
+    
+    if (data.filename.match(/\.(mp4|avi|mov|mkv)$/i)) {
+        content.innerHTML = `<video src="/media/stream/${id}" controls autoplay class="w-100 h-100" style="object-fit:contain"></video>`;
+    } else {
+        content.innerHTML = `<img src="/media/stream/${id}" class="w-100 h-100" style="object-fit:contain">`;
+    }
+    
+    document.getElementById('dash-lb-filename').innerText = data.filename;
+    
+    // Sum reactions
+    const totalReacts = Object.values(data.reactions).reduce((a, b) => a + b, 0);
+    document.getElementById('dash-lb-reacts').innerText = totalReacts;
+    document.getElementById('dash-lb-comments').innerText = data.comments.length;
+}
+
+function closeDashLightbox() {
+    document.getElementById('dash-lightbox').style.display = 'none';
+    document.getElementById('dash-lb-content').innerHTML = '';
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDashLightbox();
+});
+</script>
+{% endblock %}

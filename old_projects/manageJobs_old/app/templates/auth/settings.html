@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header fw-bold">Profile & Settings</div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <h5 class="text-primary mb-3">Public Profile</h5>
+                    
+                    <!-- AVATAR SECTION -->
+                    <div class="row g-3 mb-4 align-items-center">
+                        <div class="col-auto text-center">
+                            <!-- SAFE AVATAR LOGIC with CACHE BUSTING -->
+                            <img src="{{ current_user.avatar if current_user.avatar else 'https://ui-avatars.com/api/?name=' + current_user.name|urlencode + '&background=random' }}{{ '?v=' ~ range(1, 10000)|random if current_user.avatar else '' }}" 
+                                 class="rounded-circle border border-secondary bg-dark" 
+                                 width="80" height="80" 
+                                 style="object-fit:cover;"
+                                 onerror="this.src='https://ui-avatars.com/api/?name={{ current_user.name|urlencode }}&background=random';">
+                            
+                            <!-- NEW RESET BUTTON -->
+                            {% if current_user.avatar %}
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-xs btn-outline-danger py-0" onclick="resetAvatar()">
+                                    <i class="fas fa-times"></i> Reset
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col">
+                            <label class="small text-muted">Upload Avatar</label>
+                            <input type="file" name="avatar_file" class="form-control form-control-sm mb-2" accept="image/*">
+                            <label class="small text-muted">Or Image URL</label>
+                            <input type="text" name="avatar_url" class="form-control form-control-sm" value="{{ current_user.avatar if 'http' in current_user.avatar else '' }}" placeholder="https://...">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label>Display Name</label>
+                            <input type="text" name="display_name" class="form-control" value="{{ current_user.display_name or '' }}" placeholder="{{ current_user.username }}">
+                        </div>
+                        <div class="col-12">
+                            <label>Bio</label>
+                            <textarea name="bio" class="form-control" rows="2">{{ current_user.bio }}</textarea>
+                        </div>
+                    </div>
+
+                    <h5 class="text-primary mb-3">System Configuration</h5>
+                    <div class="mb-3">
+                        <label>API Key (Operator)</label>
+                        <input type="text" name="api_key" class="form-control font-monospace" value="{{ current_user.api_key or '' }}">
+                    </div>
+                    
+                    <h5 class="text-danger mt-4">Security</h5>
+                    <div class="mb-3">
+                        <label>New Password</label>
+                        <input type="password" name="new_password" class="form-control" placeholder="Leave blank to keep current password">
+                    </div>
+                    
+                    <button class="btn btn-primary w-100 mt-3">Save All Changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function resetAvatar() {
+    if(!confirm("Reset avatar to default?")) return;
+    const res = await fetch("{{ url_for('auth.reset_avatar') }}", {method: 'POST'});
+    if(res.ok) location.reload();
+    else alert("Failed to reset.");
+}
+</script>
+{% endblock %}

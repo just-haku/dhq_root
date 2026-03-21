@@ -1,0 +1,476 @@
+/* ================================
+   RESET / BASE STYLES
+   ================================ */
+   * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Poppins', sans-serif;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #333;
+}
+
+/* ================================
+   BACKGROUND LAYER
+   ================================ */
+#background-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    z-index: 0;
+    transition: filter 0.3s ease, opacity 0.3s ease;
+}
+/* Add near top or in animations section */
+@keyframes pulseGlow {
+  0%, 100% {
+    /* Original glow + subtle dark base */
+    text-shadow:
+      /* Dark base for separation */
+      0 0 1px rgba(0, 0, 0, 0.8),
+      /* Glow component */
+      0 0 5px var(--glow-color, rgba(255, 255, 255, 0.4)),
+      0 0 8px var(--glow-color, rgba(255, 255, 255, 0.3));
+  }
+  50% {
+    /* Original glow + subtle dark base */
+    text-shadow:
+      /* Dark base for separation */
+      0 0 1px rgba(0, 0, 0, 0.8),
+      /* Stronger Glow component */
+      0 0 10px var(--glow-color, rgba(255, 255, 255, 0.7)),
+      0 0 15px var(--glow-color, rgba(255, 255, 255, 0.5));
+  }
+}
+/* ================================
+   CLOCK CONTAINER & CHUNKS
+   ================================ */
+
+#date-display {
+  position: absolute; /* Allows dragging */
+  top: 80px; /* Initial position below top controls */
+  left: 50%;
+  transform: translateX(-50%);
+  color: #b0b0b0; /* Subtle grey */
+  font-size: 1.8rem; /* Adjust size */
+  font-weight: 400;
+  font-family: 'Poppins', sans-serif;
+  z-index: 5; /* Above background, below controls/panel */
+  white-space: nowrap; /* Prevent wrapping */
+  padding: 5px 10px;
+  border-radius: 5px;
+  /* Add subtle background on hover/drag? Optional */
+  /* background-color: rgba(255, 255, 255, 0.1); */
+}
+/* Style for elements intended to be dragged */
+.draggable-ui {
+    cursor: grab; /* Indicate draggable */
+    user-select: none; /* Prevent text selection */
+}
+.draggable-ui.dragging { /* Class added during drag */
+    cursor: grabbing;
+    opacity: 0.8; /* Visual feedback */
+    z-index: 10001; /* Ensure above everything while dragging */
+}
+#clock-container {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    z-index: 1;
+    --glow-color: rgba(255, 255, 255, 0.5); 
+    transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+.chunk {
+    position: relative;
+    display: inline-block;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 15vw;
+    line-height: 1;
+    font-weight: bold;
+    color: transparent;
+    user-select: none;
+    cursor: move; /* Default cursor for draggable chunks */
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-align: center;
+    padding: 0.05em 0;
+    margin: 0.2em 0;
+    transition: font-size 0.3s ease, margin 0.3s ease;
+}
+
+/* Add dark outline ONLY when panel is open AND glow is DISABLED */
+body.settings-panel-open #clock-container:not(.glow-enabled) .chunk {
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.8); /* Just the dark outline */
+}
+
+.separator {
+    -webkit-text-fill-color: #ccc;
+    color: #ccc;
+}
+  
+/* Apply animation ONLY when the container has the 'glow-enabled' class */
+#clock-container.glow-enabled .chunk {
+  /* Apply the animation using the CSS variable */
+  animation: pulseGlow 2.5s ease-in-out infinite;
+}
+
+/* Ensure visibility shadow still works when panel is open, overriding glow */
+body.settings-panel-open #clock-container .chunk {
+  animation: none; /* Turn off pulse */
+  /* Adjust visibility shadow as needed */
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.7), 0 0 2px rgba(0, 0, 0, 0.7);
+}
+
+/* ================================
+   CORNER BUTTONS & TOP CONTROLS
+   ================================ */
+#toggle-layout-button,
+#settings-button {
+    position: absolute;
+    top: 20px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: #fff;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+    cursor: pointer;
+    opacity: 0.1;
+    transition: opacity 0.3s;
+    z-index: 1001; /* Must be lower than settings panel */
+}
+#toggle-layout-button:hover,
+#settings-button:hover {
+    opacity: 1;
+}
+#toggle-layout-button { left: 20px; }
+#settings-button { right: 20px; }
+
+.top-controls {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 1000; /* Lower than corner buttons & panel */
+    pointer-events: none; /* Default: Not interactive */
+}
+
+/* Rule 1: Show controls when hovering body, *unless* settings panel is open */
+body:not(.settings-panel-open):hover .top-controls {
+    opacity: 1;
+    pointer-events: auto; /* Make interactive */
+}
+
+/* Rule 2: Keep controls visible and interactive if hovering the controls themselves */
+.top-controls:hover {
+    opacity: 1;
+    pointer-events: auto; /* Keep interactive */
+}
+
+.top-controls button {
+    padding: 8px 16px;
+    font-size: 1rem;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    color: #fff;
+    border-radius: 5px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+.top-controls button:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+    color: #000;
+    transform: translateY(-2px);
+}
+
+/* ================================
+   SETTINGS PANEL - TABS REWORK
+   ================================ */
+#settings-panel {
+    position: absolute;
+    top: 65px;
+    width: 480px;
+    right: -500px;
+    padding: 0;
+    background-color: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 10px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    z-index: 10000; /* Highest z-index */
+    max-height: calc(100vh - 80px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.4s ease-in-out;
+    /* Ensure panel itself doesn't block its children initially */
+    pointer-events: auto;
+}
+
+#settings-panel.open {
+    right: 15px;
+}
+
+/* Tab Buttons */
+.settings-tabs {
+  display: flex;
+  flex-wrap: nowrap; /* Keep tabs in one row */
+  overflow-x: auto;  /* Allow scrolling ONLY if buttons overflow */
+  background-color: rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  padding: 5px; /* Padding around the row of buttons */
+  align-items: center; /* Vertically center buttons if height varies slightly */
+}
+.settings-tabs::-webkit-scrollbar { display: none; }
+.settings-tabs { -ms-overflow-style: none; scrollbar-width: none; }
+
+.settings-tabs.main-tabs .tab-button {
+  width: 42px;    /* Slightly larger? */
+  height: 42px;
+  font-size: 1.2rem;
+}
+/* NEW Square Tab Button Base Style */
+.tab-button {
+  display: flex; /* Use flex to center icon inside */
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0; /* Prevent shrinking */
+  width: 40px;    /* Fixed width */
+  height: 40px;   /* Fixed height (makes it square) */
+  /* aspect-ratio: 1 / 1; /* Alternative: maintain square ratio */
+  padding: 0;     /* Remove default padding */
+  margin: 2px 3px; /* Spacing between buttons */
+  border: none;
+  background-color: transparent; /* Default background */
+  color: #555;
+  font-size: 1.1rem; /* Icon size */
+  cursor: pointer;
+  border-radius: 6px; /* Slightly rounded corners */
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  /* Remove border-bottom transition */
+  /* border-bottom: 3px solid transparent; */ /* Remove border */
+  position: relative; /* For potential future pseudo-elements if needed */
+}
+.tab-button:hover {
+    color: #000;
+    background-color: rgba(0, 0, 0, 0.06);
+}
+.tab-button.active {
+  background-color: #007bff; /* Use background color for active */
+  color: white;
+  box-shadow: inset 0 0 5px rgba(0,0,0,0.2); /* Subtle inset shadow */
+}
+
+/* Nested Tabs (Digits) */
+.settings-tabs.nested-tabs {
+  display: flex; /* Ensure flex layout */
+  flex-wrap: nowrap; /* Force horizontal layout */
+  overflow-x: auto; /* Add scrollbar ONLY if needed */
+  background-color: rgba(0, 0, 0, 0.03);
+  padding: 4px 5px; /* Slightly adjust padding */
+  justify-content: flex-start;/* Center the icon buttons */
+  margin-bottom: 1.5rem; /* Add space below nested tabs */
+}
+/* Hide scrollbar visually if needed (optional) */
+.settings-tabs.nested-tabs::-webkit-scrollbar { display: none; }
+.settings-tabs.nested-tabs { -ms-overflow-style: none; scrollbar-width: none; }
+.tab-button.nested {
+  width: 36px;    /* Smaller width */
+  height: 36px;   /* Smaller height */
+  font-size: 1rem; /* Smaller icon */
+  border-radius: 5px;
+}
+/* Ensure nested active state looks good */
+.tab-button.nested.active {
+  background-color: #007bff; /* Use background color for active */
+  color: white;
+  box-shadow: inset 0 0 5px rgba(0,0,0,0.2); /* Subtle inset shadow */
+}
+
+/* Ensure nested hover state looks good */
+.tab-button.nested:hover {
+  color: #000;
+  background-color: rgba(0, 0, 0, 0.05); /* Slightly darker hover */
+}
+/* Tab Content Area */
+.tab-content {
+  padding: 15px 20px;
+  display: none;
+  overflow-y: auto;
+  flex-grow: 1;
+  overflow-x: hidden;
+}
+.tab-content.active {
+    display: block; /* Show active tab */
+}
+
+/* General Settings Styles inside Panel */
+#settings-panel h2, #settings-panel h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+}
+#settings-panel h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.8rem;
+}
+#settings-panel label {
+    display: block;
+    margin: 0.8rem 0 0.3rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #444;
+}
+
+/* Explicit pointer events and cursor for all interactive elements in panel */
+#settings-panel input,
+#settings-panel select,
+#settings-panel button:not(.tab-button) { /* Exclude tab buttons from this specific rule if needed */
+    width: 100%;
+    max-width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 0.8rem;
+    font-size: 0.95rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    /*background-color: rgb(19, 175, 149);*/
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* Specific input type styling */
+#settings-panel input[type="color"] { padding: 2px 4px; height: 35px; }
+#settings-panel input[type="range"] { padding: 0; margin-bottom: 0.2rem; cursor: grab; }
+#settings-panel input[type="file"] { padding: 5px; cursor: default; }
+
+/* Default button style */
+#settings-panel button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    transition: background-color 0.2s ease;
+}
+#settings-panel button:hover {
+    background-color: #0056b3;
+}
+
+/* Specific apply buttons */
+.apply-button, .apply-digit-style { margin-top: 0.5rem; background-color: #28a745; }
+.apply-button:hover, .apply-digit-style:hover { background-color: #218838; }
+#apply-custom-font-btn, #apply-base-font-btn { background-color: #6f42c1; }
+#apply-custom-font-btn:hover, #apply-base-font-btn:hover { background-color: #5a32a3; }
+#apply-bg-style-btn, #apply-digits-style-btn { background-color: #ffc107; color: #333; }
+#apply-bg-style-btn:hover, #apply-digits-style-btn:hover { background-color: #e0a800; }
+
+#settings-panel hr {
+    border: 0;
+    height: 1px;
+    background-color: #eee;
+    margin: 1.2rem 0;
+}
+.setting-group {
+    margin-bottom: 1rem;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    background-color: rgba(0,0,0,0.02);
+}
+#bg-image-preview, .digit-image-preview {
+    max-width: 100%;
+    height: auto;
+    margin-top: 10px;
+    display: none;
+    border: 1px solid #ccc;
+    padding: 5px;
+}
+#bg-opacity-value, #bg-blur-value, #digits-opacity-value {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: bold;
+    min-width: 40px;
+}
+
+/* Timer/Stopwatch controls container */
+#controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 5px;
+    margin-top: 1rem;
+    border-top: 1px solid #eee;
+    padding-top: 1rem;
+}
+#controls button {
+  flex-basis: calc(50% - 3px); /* Roughly two buttons per row */
+  padding: 8px 10px;          /* Adjust padding as needed */
+  font-size: 0.9rem;           /* Adjust font size as needed */
+  cursor: pointer;
+  /* ----> VISIBILITY FIX <---- */
+  background-color: #007bff; /* Standard blue background - NOT transparent */
+  color: white;              /* White text - visible on blue */
+  opacity: 1;                /* Ensure fully opaque */
+  pointer-events: auto;      /* Ensure clickable */
+  /* ----> END VISIBILITY FIX <---- */
+  border: none;
+  border-radius: 4px;
+  text-align: center;
+  transition: background-color 0.2s ease; /* Keep hover transition */
+}
+
+/* Hover effect for controls buttons */
+#controls button:hover {
+  background-color: #0056b3; /* Darker blue on hover */
+}
+
+.shortcut-entry {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px; /* Space between label and input */
+}
+.shortcut-entry label {
+    flex-basis: 200px; /* Adjust width as needed */
+    flex-shrink: 0;
+    margin: 0; /* Override default label margin */
+    text-align: right;
+    font-size: 0.85rem;
+}
+.shortcut-input {
+    flex-grow: 1;
+    cursor: pointer; /* Indicate it's clickable to set */
+    background-color: #f0f0f0; /* Slightly different background */
+    font-weight: bold;
+    text-align: center;
+}
+.shortcut-input:focus {
+    background-color: #e0e0ff; /* Highlight when capturing */
+    outline: 2px solid #007bff;
+}
+
+
+.mode-section { display: none; }

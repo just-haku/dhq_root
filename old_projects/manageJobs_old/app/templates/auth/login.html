@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon.ico">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | System Access</title>
+    
+    <!-- Link to External CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+    
+    <!-- Dynamic Style Overrides (For Flask URL generation) -->
+    <style>
+        .background {
+            /* Inject Flask Static URL here */
+            background-image: url("{{ url_for('static', filename='img/login_bg.jpg') }}");
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Background Elements -->
+        <div class="background"></div>
+        <div class="grid-overlay"></div>
+        <div id="particles"></div>
+
+        <!-- Login Container -->
+        <div class="login-box">
+            <div class="login-header">
+                <h2>System Access</h2>
+                <p style="color: rgba(255,255,255,0.6);">Secure Terminal Login</p>
+            </div>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <form action="{{ url_for('auth.login') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="input-group">
+                    <input type="text" name="username" required autocomplete="off" id="username">
+                    <label for="username">Username</label>
+                </div>
+
+                <div class="input-group">
+                    <input type="password" name="password" required id="password">
+                    <label for="password">Password</label>
+                </div>
+
+                <button type="submit" class="login-btn">
+                    Authenticate
+                </button>
+            </form>
+            
+            <!-- Footer Links -->
+            <div style="text-align: center; margin-top: 20px; font-size: 0.8em; color: rgba(255,255,255,0.4);">
+                <p>Authorized Personnel Only</p>
+                <p style="margin-top: 5px;">
+                    <a href="{{ url_for('auth.register') }}" style="color: var(--secondary-color); text-decoration: none;">Request Access</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link to External JS -->
+    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+</body>
+</html>

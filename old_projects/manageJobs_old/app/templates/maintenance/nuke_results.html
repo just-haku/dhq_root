@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card bg-dark text-white shadow-lg">
+        <div class="card-header bg-success">
+            <h4 class="mb-0">Wipe Completed</h4>
+        </div>
+        <div class="card-body">
+            <p>The system has been reset. Below is the operation log:</p>
+            <div class="bg-black p-3 rounded font-monospace" style="max-height: 400px; overflow-y: auto; color: #0f0;">
+                {% for log in logs %}
+                    <div>> {{ log }}</div>
+                {% endfor %}
+                <div class="mt-2 text-white">> END OF LINE.</div>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Go to Login</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

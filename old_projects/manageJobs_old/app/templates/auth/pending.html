@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-clock me-2"></i>Pending Account Requests</h2>
+    
+    {% if requests|length == 0 %}
+        <div class="alert alert-info mt-3">No pending requests.</div>
+    {% else %}
+        <div class="table-responsive mt-3">
+            <table class="table table-hover align-middle shadow-sm">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Username</th>
+                        <th>Requested At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td class="fw-bold">{{ req.username }}</td>
+                        <td>{{ req.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <form action="{{ url_for('admin.approve_user', user_id=req.id) }}" method="POST">
+                                    <button class="btn btn-success btn-sm"><i class="fas fa-check"></i> Approve</button>
+                                </form>
+                                <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#denyModal{{ req.id }}">
+                                    <i class="fas fa-times"></i> Deny
+                                </button>
+                            </div>
+
+                            <!-- Deny Modal -->
+                            <div class="modal fade" id="denyModal{{ req.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <form action="{{ url_for('admin.deny_user', user_id=req.id) }}" method="POST">
+                                        <div class="modal-content">
+                                            <div class="modal-header bg-danger text-white">
+                                                <h5 class="modal-title">Deny {{ req.username }}</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <label>Reason for Denial (Shown to user):</label>
+                                                <input type="text" name="reason" class="form-control mt-2" placeholder="e.g. Invalid Format, Banned IP..." required>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="submit" class="btn btn-danger">Confirm Denial</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">Back to User Management</a>
+    </div>
+</div>
+{% endblock %}

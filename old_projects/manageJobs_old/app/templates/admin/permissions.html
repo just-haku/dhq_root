@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="text-white">Permissions for: <span class="text-info">{{ target.username }}</span></h3>
+        <a href="{{ url_for('admin.users') }}" class="btn btn-outline-light">Back to Users</a>
+    </div>
+
+    <div class="card bg-dark text-white border-warning">
+        <div class="card-header bg-warning text-dark fw-bold">
+            <i class="fas fa-shield-alt"></i> Access Control Matrix
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <div class="row">
+                    {% for category, perms in all_perms.items() %}
+                    <div class="col-md-6 mb-4">
+                        <h5 class="border-bottom border-secondary pb-2 text-primary">{{ category }}</h5>
+                        {% for p in perms %}
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" name="{{ p }}" id="{{ p }}"
+                                   {% if current_perms.get(p) == True or (target.role == 'admin' and current_perms.get(p) != False) %}checked{% endif %}>
+                            <label class="form-check-label" for="{{ p }}">
+                                {{ p|replace('_', ' ')|title }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="mt-3 border-top border-secondary pt-3 text-end">
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-save"></i> Save Permissions
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="alert alert-info mt-3 glass-alert">
+        <i class="fas fa-info-circle"></i> 
+        <strong>Note:</strong> If "Admin" role is set, most permissions are ON by default. Use this panel to revoke specific rights.
+    </div>
+</div>
+{% endblock %}

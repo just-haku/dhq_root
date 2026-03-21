@@ -1,0 +1,209 @@
+/* --- BASE & GRID --- */
+:root {
+    --clock-font: 'Orbitron', sans-serif;
+    --panel-font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --clock-size: 15vw;
+}
+
+body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: #000; 
+    font-family: var(--panel-font); /* Default to UI font, clock uses specific var */
+    height: 100vh; width: 100vw;
+    color: white;
+}
+
+#alignment-grid {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 5; pointer-events: none;
+    display: none; /* Toggled by JS */
+    background: 
+        linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+    background-size: 10% 10%; /* Grid size */
+}
+.grid-line { position: absolute; background: rgba(0, 255, 255, 0.3); }
+.grid-line.v-mid { left: 50%; height: 100%; width: 1px; }
+.grid-line.h-mid { top: 50%; width: 100%; height: 1px; }
+
+/* --- CLOCK CONTAINER & CHUNKS --- */
+#background-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+#clock-container {
+    position: relative; z-index: 10;
+    display: flex; justify-content: center; align-items: center;
+    width: 100%; height: 100%;
+    pointer-events: none; /* Let clicks pass through unless on chunks */
+}
+
+.chunk {
+    font-family: var(--clock-font);
+    font-size: var(--clock-size);
+    font-weight: bold;
+    line-height: 1;
+    padding: 0 0.2rem;
+    
+    /* STABILITY FIX: Min-width prevents jitter when digits change (e.g. 1 vs 0) */
+    min-width: 0.6em; 
+    text-align: center;
+    
+    user-select: none;
+    cursor: grab;
+    pointer-events: auto; /* Re-enable pointer events for dragging */
+    
+    /* TEXTURE/MASK SUPPORT */
+    background-clip: text; 
+    -webkit-background-clip: text;
+    color: white; /* Default, overridden by JS for textures */
+    
+    transition: color 0.2s, opacity 0.2s;
+}
+.chunk:active { cursor: grabbing; }
+
+/* Separators need less width */
+.chunk.sep {
+    min-width: 0.3em;
+    padding-bottom: 0.1em; /* Optical alignment */
+}
+
+/* Masked Chunk Specifics */
+.masked-chunk {
+    color: rgba(255,255,255,0.1) !important;
+    -webkit-text-fill-color: transparent !important;
+    /* Background properties set by JS */
+}
+
+/* --- UI CONTROLS --- */
+button {
+    font-family: var(--panel-font);
+    background: rgba(30, 30, 35, 0.9); 
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white; padding: 8px 12px; 
+    cursor: pointer; border-radius: 6px;
+    transition: 0.2s;
+    font-size: 0.85rem;
+}
+button:hover { background: #3b82f6; border-color: #3b82f6; }
+
+/* Corner Buttons */
+#toggle-layout-button, #settings-button {
+    position: absolute; top: 20px; z-index: 100;
+    width: 40px; height: 40px; border-radius: 50%;
+    opacity: 0; transition: opacity 0.3s;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+#toggle-layout-button { left: 20px; }
+#settings-button { right: 20px; }
+
+/* Hover Detection Areas */
+.corner-hitbox {
+    position: absolute; top: 0; width: 100px; height: 100px; z-index: 99;
+}
+.corner-hitbox.left { left: 0; }
+.corner-hitbox.right { right: 0; }
+
+/* Show buttons when hovering nearby or on button */
+.corner-hitbox:hover ~ #toggle-layout-button, 
+.corner-hitbox:hover ~ #settings-button,
+#toggle-layout-button:hover, 
+#settings-button:hover { 
+    opacity: 1; 
+}
+
+.top-controls {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 50; display: flex; gap: 10px;
+    opacity: 0; transition: opacity 0.3s;
+}
+body:hover .top-controls { opacity: 1; }
+
+#date-display {
+    position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%);
+    z-index: 10; 
+    font-family: var(--clock-font); /* Date matches clock */
+    font-size: calc(var(--clock-size) * 0.15); /* Relative size */
+    cursor: grab;
+    pointer-events: auto;
+}
+
+/* --- SETTINGS PANEL --- */
+#settings-panel {
+    position: absolute; top: 70px; right: 20px;
+    width: 360px; max-height: 85vh;
+    background: rgba(18, 18, 22, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    border-radius: 12px;
+    z-index: 2000;
+    display: none; flex-direction: column;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    overflow: hidden;
+    font-family: var(--panel-font);
+}
+#settings-panel.active { display: flex; }
+
+.settings-tabs { display: flex; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.1); }
+.tab-button { 
+    flex: 1; background: transparent; border: none; 
+    padding: 12px 0; color: #888; border-radius: 0; 
+    font-size: 1rem;
+}
+.tab-button.active { color: #3b82f6; border-bottom: 2px solid #3b82f6; background: rgba(59, 130, 246, 0.1); }
+.tab-button:hover { color: white; background: rgba(255,255,255,0.05); }
+
+.tab-content { padding: 20px; overflow-y: auto; display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.2s; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+h3 { margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; font-size: 1rem; color: #e2e8f0; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+/* Inputs */
+label { display: block; margin-bottom: 5px; font-size: 0.8rem; color: #94a3b8; }
+input[type="text"], input[type="number"], select {
+    width: 100%; background: rgba(0,0,0,0.4); border: 1px solid #444;
+    color: white; padding: 8px; border-radius: 6px; margin-bottom: 12px;
+    font-family: var(--panel-font);
+}
+input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    border-color: #3b82f6; outline: none;
+}
+
+input[type="range"] { width: 100%; margin-bottom: 15px; cursor: pointer; }
+input[type="color"] { width: 40px; height: 30px; padding: 0; border: none; cursor: pointer; border-radius: 4px; }
+
+.d-flex { display: flex; }
+.gap-2 { gap: 0.5rem; }
+.align-center { align-items: center; }
+.w-100 { width: 100%; }
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+
+.btn-secondary { background: rgba(255,255,255,0.1); border-color: transparent; }
+.btn-secondary:hover { background: rgba(255,255,255,0.2); }
+.btn-small { padding: 4px 10px; font-size: 0.75rem; }
+.btn-danger { background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.5); color: #fca5a5; }
+.btn-danger:hover { background: rgba(220, 38, 38, 0.4); }
+
+/* CUSTOM MODAL */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+    z-index: 3000; display: flex; justify-content: center; align-items: center;
+}
+.modal-box {
+    background: #1e1e24; border: 1px solid rgba(255,255,255,0.2);
+    padding: 30px; border-radius: 12px; min-width: 300px;
+    text-align: center; font-family: var(--panel-font);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+.modal-box h3 { border: none; font-size: 1.2rem; margin-bottom: 15px; color: #fff; }
+.modal-box p { color: #ccc; margin-bottom: 25px; }
+.modal-actions { display: flex; gap: 10px; justify-content: center; }
+.modal-actions button { min-width: 100px; }
+
+.shortcut-entry { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; }
+.shortcut-input { width: 80px !important; text-align: center; margin-bottom: 0 !important; cursor: pointer; font-family: monospace; font-weight: bold; background: #222 !important; }

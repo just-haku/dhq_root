@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secret Kuro Group</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    
+    <style>
+        /* --- NAMECARD STYLE (16:9 RATIO) --- */
+        .namecard-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            border-radius: 12px;
+            background: #1e293b;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            overflow: visible; /* Allow frames to spill out */
+        }
+        .namecard-content-clipper {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            overflow: hidden;
+            border-radius: 12px;
+            z-index: 1;
+        }
+        .namecard-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s;
+        }
+        .namecard-container:hover .namecard-bg { transform: scale(1.05); }
+        
+        .namecard-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.4) 50%, transparent 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 20px;
+        }
+        
+        /* FRAMES & AVATAR */
+        .banner-frame {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 115%; height: 115%;
+            z-index: 0; /* Behind clipper */
+            pointer-events: none;
+        }
+        /* CSS Banner Frame Support */
+        div.banner-frame {
+            z-index: 0;
+            border-radius: 16px; 
+            background: transparent;
+        }
+
+        .avatar-wrapper {
+            position: relative;
+            width: 64px; height: 64px;
+            margin-bottom: 10px;
+        }
+        .namecard-avatar {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 2px solid #3b82f6;
+            background: #000;
+            object-fit: cover;
+            position: relative;
+            z-index: 10;
+        }
+        .avatar-frame {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 135%; height: 135%;
+            z-index: 20; /* On top of avatar */
+            pointer-events: none;
+        }
+        /* CSS Avatar Frame Support */
+        div.avatar-frame {
+            border-radius: 50%;
+            box-sizing: border-box;
+        }
+
+        /* --- MENU LINKS --- */
+        .menu-section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.2px; color: #64748b; margin: 15px 0 8px 10px; font-weight: 700; }
+        .menu-link { display: flex; align-items: center; padding: 12px 20px; font-size: 1.05rem; color: #cbd5e1; text-decoration: none; border-radius: 8px; transition: all 0.25s; font-weight: 500; margin-bottom: 4px; border-left: 4px solid transparent; }
+        .menu-link:hover, .menu-link.active { background: rgba(59, 130, 246, 0.1); color: #60a5fa; transform: translateX(5px); border-left-color: #3b82f6; }
+        .menu-link i { width: 28px; text-align: center; margin-right: 12px; transition: transform 0.3s; }
+        .menu-link:hover i { transform: scale(1.2); }
+        
+        /* --- NOTIFICATION CENTER STYLES --- */
+        .notif-card { border-left: 4px solid transparent; transition: background 0.2s; }
+        .notif-card.unread { background: rgba(59, 130, 246, 0.1); border-left-color: #3b82f6; }
+        .notif-card:hover { background: rgba(255, 255, 255, 0.05); }
+        .notif-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+        
+        /* --- TOP DROPDOWN STYLES --- */
+        .custom-dropdown-item { padding: 10px 20px; display: flex; align-items: center; gap: 10px; color: var(--bs-body-color); transition: 0.2s; }
+        .custom-dropdown-item:hover { background: var(--bs-secondary-bg); color: var(--bs-primary); padding-left: 25px; cursor: pointer; }
+        .custom-dropdown-item i { width: 20px; text-align: center; opacity: 0.7; }
+        
+        /* --- ANIMATIONS ENGINE (GLOBAL) --- */
+        /* 1. Spin (Conic) */
+        @keyframes anim-spin { 
+            from { transform: translate(-50%, -50%) rotate(0deg); } 
+            to { transform: translate(-50%, -50%) rotate(360deg); } 
+        }
+        /* Note: For items that are NOT centered absolutely, we need a non-translating version */
+        @keyframes anim-spin-static { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* 2. Flow (Linear Gradient Move) */
+        @keyframes anim-flow { 
+            0% { background-position: 0% 50%; } 
+            100% { background-position: 100% 50%; } 
+        }
+        @keyframes anim-flow-y { 
+            0% { background-position: 50% 0%; } 
+            100% { background-position: 50% 100%; } 
+        }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100 bg-body">
+
+    <!-- HELPER MACRO FOR FRAMES -->
+    {% macro render_frame(source, type='avatar') %}
+        {% if source %}
+            {% if '/' in source %}
+                <img src="{{ source }}" class="{{ type }}-frame">
+            {% else %}
+                <!-- CSS BASED FRAME -->
+                <!-- We wrap generic styles in a div. For complex animations, the style string itself carries the animation prop -->
+                <div class="{{ type }}-frame" style="{{ source }}"></div>
+            {% endif %}
+        {% endif %}
+    {% endmacro %}
+
+    <!-- ACTIVE BACKGROUND BLUR -->
+    {% if current_user.is_authenticated and current_user.active_background %}
+    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; 
+                background: url('{{ current_user.active_background }}') no-repeat center center/cover; 
+                filter: blur(8px) brightness(0.4);"></div>
+    {% endif %}
+
+    <!-- TOP BAR -->
+    <nav class="navbar navbar-expand-lg border-bottom px-3 py-2 bg-body-tertiary sticky-top shadow-sm" style="z-index: 1030;">
+        <div class="container-fluid p-0">
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-secondary border-0 fw-bold btn-sm" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainMenu">
+                    <i class="fas fa-bars fa-lg"></i>
+                </button>
+                    <a class="navbar-brand fw-bold ms-2 fs-5" href="{{ url_for('dashboard.index') }}">
+                        <img src="{{ url_for('static', filename='img/logo.jpg') }}" 
+                            alt="Haku Projex" 
+                            class="rounded-circle border border-2 border-secondary shadow-sm"
+                            style="height: 40px; width: 40px; object-fit: cover;"
+                            onerror="this.src='{{ url_for('static', filename='img/404.png') }}'">
+                    </a>
+            </div>
+            
+            {% if current_user.is_authenticated %}
+            <div class="d-flex align-items-center gap-3">
+                
+                <!-- KPI BADGE -->
+                <a href="{{ url_for('shop.index') }}" class="badge bg-warning text-dark text-decoration-none d-flex align-items-center px-3 py-2 rounded-pill shadow-sm me-2">
+                    <i class="fas fa-coins me-2"></i> <span id="kpi-display">{{ current_user.kpi }}</span> KPI
+                </a>
+
+                <!-- NOTIFICATION BELL -->
+                <button class="btn btn-link text-body p-0 position-relative me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#notifCenter" onclick="loadFullNotifications()">
+                    <i class="fas fa-bell fa-lg"></i>
+                    <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none">0</span>
+                </button>
+
+                <div class="vr mx-2"></div>
+
+                <!-- DROPDOWN -->
+                <div class="dropdown">
+                    <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle gap-2" id="userMenu" data-bs-toggle="dropdown">
+                        <div style="position: relative; width: 36px; height: 36px;">
+                            <img src="{{ current_user.avatar if current_user.avatar else 'https://ui-avatars.com/api/?name=' + current_user.name|urlencode + '&background=random' }}{{ '?v=' ~ range(1, 10000)|random if current_user.avatar else '' }}" 
+                                 class="rounded-circle border border-2 border-secondary shadow-sm hover-scale bg-dark" width="100%" height="100%" 
+                                 style="object-fit:cover;"
+                                 onerror="this.src='https://ui-avatars.com/api/?name={{ current_user.name|urlencode }}&background=random';">
+                            
+                            {{ render_frame(current_user.active_avatar_frame, 'avatar') }}
+                        </div>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 mt-3 rounded-3 overflow-hidden p-0" style="width: 260px;">
+                        
+                        <!-- DROPDOWN HEADER WITH AVATAR -->
+                        <div class="p-3 bg-body-secondary border-bottom d-flex align-items-center gap-3">
+                            <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
+                                <img src="{{ current_user.avatar if current_user.avatar else 'https://ui-avatars.com/api/?name=' + current_user.name|urlencode + '&background=random' }}{{ '?v=' ~ range(1, 10000)|random if current_user.avatar else '' }}" 
+                                     class="rounded-circle border border-secondary bg-dark" width="100%" height="100%" 
+                                     style="object-fit:cover;"
+                                     onerror="this.src='https://ui-avatars.com/api/?name={{ current_user.name|urlencode }}&background=random';">
+                                {{ render_frame(current_user.active_avatar_frame, 'avatar') }}
+                            </div>
+                            <div class="overflow-hidden">
+                                <div class="fw-bold text-truncate">{{ current_user.name }}</div>
+                                <div class="small text-muted text-truncate">@{{ current_user.username }}</div>
+                            </div>
+                        </div>
+
+                        <div class="py-2">
+                            <a class="dropdown-item custom-dropdown-item p-2" data-bs-toggle="modal" data-bs-target="#inventoryModal">
+                                <i class="fas fa-box-open text-primary me-2"></i> My Inventory
+                            </a>
+                            <a class="dropdown-item custom-dropdown-item p-2" href="{{ url_for('shop.index') }}">
+                                <i class="fas fa-store text-warning me-2"></i> Item Shop
+                            </a>
+                            <a class="dropdown-item custom-dropdown-item p-2" href="{{ url_for('auth.settings') }}">
+                                <i class="fas fa-cog me-2"></i> Settings
+                            </a>
+                        </div>
+                        <div class="border-top p-1 bg-body-secondary">
+                            <a class="dropdown-item custom-dropdown-item text-danger fw-bold justify-content-center p-2" href="{{ url_for('auth.logout') }}">
+                                LOGOUT
+                            </a>
+                        </div>
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- LEFT SIDEBAR (WIDTH 550px) -->
+    <div class="offcanvas offcanvas-start bg-dark text-white" tabindex="-1" id="mainMenu" style="width: 550px; border-right: 1px solid #334155;">
+        <div class="offcanvas-header pb-0">
+            <h6 class="offcanvas-title text-muted small fw-bold"><i class="fas fa-terminal me-2"></i>SYSTEM TERMINAL</h6>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column">
+            {% if current_user.is_authenticated %}
+            
+            <!-- NAMECARD -->
+            <div class="namecard-container">
+                <!-- BANNER FRAME (Bottom Layer) -->
+                {{ render_frame(current_user.active_banner_frame, 'banner') }}
+                
+                <!-- CLIPPER (Holds BG & Content) -->
+                <div class="namecard-content-clipper">
+                    <!-- BACKGROUND -->
+                    {% if current_user.namecard_url %}
+                    <img src="{{ current_user.namecard_url }}" class="namecard-bg">
+                    {% endif %}
+                    
+                    <!-- OVERLAY -->
+                    <div class="namecard-overlay">
+                        <div class="d-flex align-items-end gap-3">
+                            
+                            <!-- AVATAR WITH FRAME -->
+                            <div class="avatar-wrapper">
+                                <img src="{{ current_user.avatar if current_user.avatar else 'https://ui-avatars.com/api/?name=' + current_user.name|urlencode + '&background=random' }}{{ '?v=' ~ range(1, 10000)|random if current_user.avatar else '' }}" 
+                                     class="namecard-avatar"
+                                     onerror="this.src='https://ui-avatars.com/api/?name={{ current_user.name|urlencode }}&background=random';">
+                                
+                                {{ render_frame(current_user.active_avatar_frame, 'avatar') }}
+                            </div>
+                            
+                            <div class="mb-2" style="position: relative; z-index: 30;">
+                                <div class="fw-bold text-white fs-3 lh-1" style="text-shadow: 0 2px 4px rgba(0,0,0,0.8);">{{ current_user.name }}</div>
+                                <div class="d-flex align-items-center gap-2 mt-1">
+                                    
+                                    <!-- DYNAMIC TITLE BADGE -->
+                                    {% if current_user.active_title %}
+                                    <span class="badge border rounded-pill px-3 py-1" 
+                                          style="background: {{ current_user.active_title_bg if current_user.active_title_bg and ('http' not in current_user.active_title_bg and '/' not in current_user.active_title_bg) else 'url(' + current_user.active_title_bg + ')' if current_user.active_title_bg else '#0d6efd' }}; 
+                                                 color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+                                        {{ current_user.active_title }}
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-primary bg-opacity-75 border border-primary border-opacity-50 rounded-pill px-2">
+                                        {{ current_user.role|upper }}
+                                    </span>
+                                    {% endif %}
+                                    
+                                    <span class="text-warning fw-bold small" style="text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
+                                        <i class="fas fa-coins"></i> {{ current_user.kpi }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LINKS -->
+            <div class="flex-grow-1 overflow-auto custom-scrollbar pe-2" style="position: relative; z-index: 5;">
+                <div class="menu-section-label">Workspace</div>
+                <a href="{{ url_for('dashboard.index') }}" class="menu-link"><i class="fas fa-home"></i> Dashboard</a>
+                <a href="{{ url_for('media.gallery') }}" class="menu-link"><i class="fas fa-photo-video"></i> Media Gallery</a>
+                
+                <div class="menu-section-label">Economy</div>
+                <a href="{{ url_for('shop.index') }}" class="menu-link"><i class="fas fa-store text-warning"></i> Item Shop</a>
+                <a href="{{ url_for('orders.create') }}" class="menu-link"><i class="fas fa-plus-circle text-info"></i> Place Order</a>
+                <a href="{{ url_for('orders.manage') }}" class="menu-link"><i class="fas fa-tasks text-info"></i> Manage Orders</a>
+                
+                {% if current_user.role in ['operator', 'admin'] %}
+                <div class="menu-section-label">Administration</div>
+                <a href="{{ url_for('admin.tasks') }}" class="menu-link"><i class="fas fa-clipboard-check text-warning"></i> Task Manager</a>
+                <a href="{{ url_for('admin.users') }}" class="menu-link"><i class="fas fa-users-cog text-warning"></i> Users & Groups</a>
+                {% endif %}
+
+                <div class="menu-section-label">System</div>
+                <a href="{{ url_for('auth.settings') }}" class="menu-link"><i class="fas fa-cog"></i> Settings</a>
+                <a href="{{ url_for('auth.logout') }}" class="menu-link text-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+            
+            <!-- NUKE BUTTON -->
+            {% if current_user.role == 'operator' %}
+            <div class="nuke-btn-container">
+                 <button class="btn btn-outline-danger w-100 fw-bold py-2" onclick="openNukeModal()">
+                    <i class="fas fa-radiation-alt fa-spin-hover me-2"></i> SYSTEM WIPE
+                 </button>
+            </div>
+            {% endif %}
+            
+            {% else %}
+            <!-- LOGGED OUT -->
+            <div class="flex-grow-1 d-flex flex-column justify-content-center align-items-center text-center">
+                <i class="fas fa-lock fa-3x mb-3 text-muted"></i>
+                <h5 class="text-muted">Access Restricted</h5>
+                <p class="small text-secondary mb-4">Please authenticate to access the system.</p>
+                <a href="{{ url_for('auth.login') }}" class="btn btn-primary w-75">Login</a>
+                
+                <div class="mt-5 pt-5 border-top border-secondary w-100">
+                    <a href="{{ url_for('clock.index') }}" class="menu-link justify-content-center text-muted">
+                        <i class="far fa-clock"></i> Clock Mode
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR (NOTIFS) -->
+    <div class="offcanvas offcanvas-end bg-body-tertiary" tabindex="-1" id="notifCenter" style="width: 400px;">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title"><i class="fas fa-bell text-primary me-2"></i>Notifications</h5>
+            <div>
+                <button class="btn btn-sm btn-link text-decoration-none" onclick="markAllRead()">Mark all read</button>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+            </div>
+        </div>
+        <div class="offcanvas-body p-0 d-flex flex-column">
+            <div id="notifSpinner" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+            <div id="notifListContainer" class="flex-grow-1 overflow-auto"></div>
+        </div>
+    </div>
+
+    <!-- CONTENT WRAPPER -->
+    <div class="container-fluid px-4 pb-5 flex-grow-1 pt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm my-3 py-2 small">{{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- MODALS -->
+    <!-- INVENTORY MODAL -->
+    {% if current_user.is_authenticated %}
+    <div class="modal fade" id="inventoryModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content bg-dark text-white border-secondary">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title"><i class="fas fa-box-open text-primary me-2"></i>My Inventory</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        {% for slot in current_user.inventory %}
+                        <div class="col-md-4 col-6">
+                            <!-- ITEM CARD -->
+                            <!-- CHANGED: Added bg-black instead of bg-dark to make it darker and cleaner -->
+                            <div class="card h-100 bg-black border-secondary position-relative overflow-hidden">
+                                
+                                <!-- PREVIEW CONTAINER (Updated: Transparent background) -->
+                                <div class="ratio ratio-16x9 bg-transparent border-bottom border-secondary d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                                    {% if slot.item.type == 'title' %}
+                                        <!-- Title Preview -->
+                                        <span class="badge border rounded-pill px-3 py-2 fs-6 shadow" 
+                                              style="background: {{ slot.item.resource_url if 'http' not in slot.item.resource_url and '/' not in slot.item.resource_url else 'url(' + slot.item.resource_url + ')' }}; 
+                                                     color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+                                            {{ slot.item.title_content or slot.item.name }}
+                                        </span>
+                                    {% elif slot.item.type == 'avatar_frame' %}
+                                        <!-- Frame Preview -->
+                                        <div style="width: 64px; height: 64px; position: relative;">
+                                            <div class="bg-secondary rounded-circle w-100 h-100 border border-2 border-dark"></div>
+                                            {{ render_frame(slot.item.resource_url, 'avatar') }}
+                                        </div>
+                                    {% elif slot.item.type == 'banner_frame' %}
+                                        <!-- Banner Frame Preview -->
+                                        <div style="width: 80%; height: 60%; position: relative; background: #333; border-radius: 8px;">
+                                            {{ render_frame(slot.item.resource_url, 'banner') }}
+                                        </div>
+                                    {% else %}
+                                        <!-- Image Preview -->
+                                        <img src="{{ slot.item.resource_url }}" class="object-fit-contain w-100 h-100">
+                                    {% endif %}
+                                    
+                                    <!-- Type Badge -->
+                                    <span class="position-absolute top-0 end-0 badge bg-secondary m-2 opacity-75 small">{{ slot.item.type|replace('_', ' ')|upper }}</span>
+                                </div>
+                                
+                                <!-- CARD BODY -->
+                                <div class="card-body p-2 text-center">
+                                    <!-- Thinner Title -->
+                                    <div class="fw-normal text-white small text-truncate mb-2">{{ slot.item.name }}</div>
+                                    
+                                    <!-- ACTIVE STATE CHECK -->
+                                    {% set is_active = False %}
+                                    {% if slot.item.type=='namecard' and current_user.namecard_url==slot.item.resource_url %}{% set is_active=True %}{% endif %}
+                                    {% if slot.item.type=='title' and current_user.active_title==(slot.item.title_content or slot.item.name) %}{% set is_active=True %}{% endif %}
+                                    {% if slot.item.type=='background' and current_user.active_background==slot.item.resource_url %}{% set is_active=True %}{% endif %}
+                                    {% if slot.item.type=='avatar_frame' and current_user.active_avatar_frame==slot.item.resource_url %}{% set is_active=True %}{% endif %}
+                                    {% if slot.item.type=='banner_frame' and current_user.active_banner_frame==slot.item.resource_url %}{% set is_active=True %}{% endif %}
+                                    
+                                    {% if is_active %}
+                                    <button onclick="unequipItem('{{ slot.item.type }}')" class="btn btn-sm btn-outline-danger w-100"><i class="fas fa-times"></i> Unequip</button>
+                                    {% else %}
+                                    <button onclick="equipItem({{ slot.item.id }})" class="btn btn-sm btn-primary w-100">Equip</button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="col-12 text-center py-5 text-muted">
+                            <i class="fas fa-box-open fa-3x mb-3 opacity-25"></i>
+                            <p>Your inventory is empty. Visit the Shop!</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- NUKE MODAL -->
+    <div class="modal fade" id="nukeModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-danger bg-dark text-white">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> DANGER ZONE</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="fw-bold text-center text-danger fs-5">FULL SYSTEM RESET</p>
+                    <input type="text" id="nukeStep1" class="form-control bg-black text-white border-secondary mb-2" placeholder="Type YES to confirm">
+                    <input type="password" id="nukeStep2" class="form-control bg-black text-white border-secondary" placeholder="Operator Password">
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger fw-bold" onclick="executeNuke()">INITIATE WIPE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BUG REPORT MODAL -->
+    <div class="modal fade" id="bugReportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title text-danger"><i class="fas fa-bug me-2"></i>Report Issue</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Issue Type</label>
+                        <select class="form-select" id="bugType">
+                            <option>Visual Glitch</option>
+                            <option>Functional Error</option>
+                            <option>Feature Request</option>
+                            <option>Security Concern</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="bugDesc" rows="4" placeholder="What happened?"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="submitBug()">Submit Report</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // INVENTORY FUNCTIONS
+        async function equipItem(id) {
+            const res = await fetch(`/shop/equip/${id}`, {method:'POST'});
+            if(res.ok) location.reload();
+        }
+        async function unequipItem(type) {
+            const res = await fetch('/shop/unequip', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({type: type})
+            });
+            if(res.ok) location.reload();
+        }
+
+        // NOTIFICATIONS
+        async function updateBadge() {
+            try {
+                const res = await fetch('/dashboard/notifications');
+                if(res.ok) {
+                    const json = await res.json();
+                    const badge = document.getElementById('notifBadge');
+                    if(json.unread_count > 0) {
+                        badge.innerText = json.unread_count;
+                        badge.style.display = 'block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            } catch(e) {}
+        }
+
+        async function loadFullNotifications() {
+            const container = document.getElementById('notifListContainer');
+            const spinner = document.getElementById('notifSpinner');
+            spinner.style.display = 'block';
+            container.innerHTML = '';
+
+            try {
+                const res = await fetch('/dashboard/notifications');
+                const json = await res.json();
+                
+                spinner.style.display = 'none';
+                const badge = document.getElementById('notifBadge');
+                
+                if(json.unread_count > 0) {
+                    badge.innerText = json.unread_count;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+
+                if(json.data.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5 text-muted">
+                            <i class="far fa-bell-slash fa-3x mb-3 opacity-25"></i>
+                            <p>All caught up!</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                json.data.forEach(n => {
+                    const el = document.createElement('div');
+                    el.className = `notif-card p-3 border-bottom ${n.is_read ? '' : 'unread'}`;
+                    
+                    let iconClass = 'info-circle text-info';
+                    let bgClass = 'bg-info-subtle';
+                    if(n.type === 'success') { iconClass = 'check-circle text-success'; bgClass = 'bg-success-subtle'; }
+                    if(n.type === 'warning') { iconClass = 'exclamation-triangle text-warning'; bgClass = 'bg-warning-subtle'; }
+                    if(n.type === 'danger') { iconClass = 'times-circle text-danger'; bgClass = 'bg-danger-subtle'; }
+
+                    el.innerHTML = `
+                        <div class="d-flex gap-3">
+                            <div class="notif-icon ${bgClass}">
+                                <i class="fas fa-${iconClass}"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h6 class="mb-1 ${n.is_read ? 'text-body' : 'fw-bold text-primary'}">${n.title}</h6>
+                                    <small class="text-muted x-small">${n.time}</small>
+                                </div>
+                                <p class="mb-0 small text-secondary">${n.content}</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    if(!n.is_read) {
+                        el.style.cursor = 'pointer';
+                        el.onclick = () => markOneRead(n.id, el);
+                    }
+                    
+                    container.appendChild(el);
+                });
+
+            } catch(e) {
+                spinner.style.display = 'none';
+            }
+        }
+
+        async function markOneRead(id, element) {
+            await fetch(`/dashboard/notifications/read/${id}`, {method: 'POST'});
+            element.classList.remove('unread');
+            element.querySelector('h6').classList.remove('fw-bold', 'text-primary');
+            element.querySelector('h6').classList.add('text-body');
+            element.onclick = null;
+            element.style.cursor = 'default';
+            const badge = document.getElementById('notifBadge');
+            let count = parseInt(badge.innerText) || 0;
+            if(count > 0) {
+                count--;
+                badge.innerText = count;
+                if(count === 0) badge.style.display = 'none';
+            }
+        }
+
+        async function markAllRead() {
+            await fetch('/dashboard/notifications/read_all', {method: 'POST'});
+            loadFullNotifications();
+        }
+
+        // MODAL HELPERS
+        function openNukeModal() { new bootstrap.Modal(document.getElementById('nukeModal')).show(); }
+        
+        async function executeNuke() {
+            const s1 = document.getElementById('nukeStep1').value;
+            const s2 = document.getElementById('nukeStep2').value;
+            const res = await fetch('/admin/nuke_data', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({confirm_text: s1, password: s2})
+            });
+            const data = await res.json();
+            if(data.status === 'ok') { alert("WIPE COMPLETE."); location.reload(); } 
+            else { alert(data.msg); }
+        }
+
+        function submitBug() {
+            const btn = document.querySelector('#bugReportModal .btn-danger');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('bugReportModal')).hide();
+                alert("Report Sent! Thank you for your feedback.");
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                document.getElementById('bugDesc').value = '';
+            }, 1000);
+        }
+
+        {% if current_user.is_authenticated %}
+        // Initial badge check
+        updateBadge();
+        {% endif %}
+    </script>
+</body>
+</html>

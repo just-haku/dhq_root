@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-lg bg-dark text-white">
+            <div class="card-header bg-primary fw-bold">
+                <i class="fas fa-plus-circle"></i> Create Collaboration Order
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Basic Info -->
+                    <div class="col-12">
+                        <label class="text-info">Collaboration Name</label>
+                        <input type="text" id="collab_name" class="form-control bg-secondary text-white border-0" placeholder="e.g. Boost Campaign Oct 2025" required>
+                    </div>
+                    
+                    <div class="col-12">
+                        <label>Target Link</label>
+                        <input type="text" id="link" class="form-control bg-secondary text-white border-0" placeholder="https://..." required>
+                    </div>
+                    <div class="col-md-6">
+                        <label>Service ID</label>
+                        <input type="text" id="service_id" class="form-control bg-secondary text-white border-0" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label>Service Name</label>
+                        <input type="text" id="service_name" class="form-control bg-secondary text-white border-0" required>
+                    </div>
+                    
+                    <!-- Algo Params -->
+                    <div class="col-md-3">
+                        <label>Total Quantity (a)</label>
+                        <input type="number" id="total_a" class="form-control bg-secondary text-white border-0" value="1000">
+                    </div>
+                    <div class="col-md-3">
+                        <label>Duration (Days)</label>
+                        <input type="number" id="days" class="form-control bg-secondary text-white border-0" value="1">
+                    </div>
+                    <div class="col-md-3">
+                        <label>Step (Hours)</label>
+                        <select id="step" class="form-select bg-secondary text-white border-0">
+                            <option value="0.25">0.25 (15m)</option>
+                            <option value="0.5">0.5 (30m)</option>
+                            <option value="1">1.0 (1h)</option>
+                            <option value="2">2.0 (2h)</option>
+                            <option value="24">24 (1d)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label>Tolerance (%)</label>
+                        <input type="number" id="tolerance" class="form-control bg-secondary text-white border-0" value="10">
+                    </div>
+                    <div class="col-12">
+                        <button onclick="generatePreview()" class="btn btn-outline-info w-100">Preview Graph</button>
+                    </div>
+                </div>
+                
+                <!-- 2 GRAPHS -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h6 class="text-center text-muted">Total Accumulated (a)</h6>
+                        <canvas id="chartTotal" style="height: 200px;"></canvas>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-center text-muted">Amount per Step (y)</h6>
+                        <canvas id="chartStep" style="height: 200px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-end mt-3 border-top border-secondary pt-3">
+                    <button onclick="saveOrder()" class="btn btn-success btn-lg px-5">Start Collaboration</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let currentTimeline = [];
+let chartTotal = null;
+let chartStep = null;
+
+async function generatePreview() {
+    const data = {
+        total_a: document.getElementById('total_a').value,
+        days: document.getElementById('days').value,
+        step: document.getElementById('step').value,
+        tolerance: document.getElementById('tolerance').value
+    };
+
+    const res = await fetch('/orders/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    
+    if(result.status === 'ok') {
+        currentTimeline = result.timeline;
+        drawCharts(result.timeline);
+    }
+}
+
+function drawCharts(timeline) {
+    const labels = timeline.map(t => `+${t.time_offset_hours}h`);
+    const stepData = timeline.map(t => t.amount);
+    let acc = 0;
+    const totalData = timeline.map(t => { acc += t.amount; return acc; });
+
+    const ctxStep = document.getElementById('chartStep').getContext('2d');
+    if(chartStep) chartStep.destroy();
+    chartStep = new Chart(ctxStep, {
+        type: 'bar',
+        data: { labels: labels, datasets: [{ label: 'Qty (y)', data: stepData, backgroundColor: '#3b82f6' }] }
+    });
+
+    const ctxTotal = document.getElementById('chartTotal').getContext('2d');
+    if(chartTotal) chartTotal.destroy();
+    chartTotal = new Chart(ctxTotal, {
+        type: 'line',
+        data: { labels: labels, datasets: [{ label: 'Total (a)', data: totalData, borderColor: '#10b981', tension: 0.3 }] }
+    });
+}
+
+async function saveOrder() {
+    const data = {
+        name: document.getElementById('collab_name').value,
+        link: document.getElementById('link').value,
+        service_id: document.getElementById('service_id').value,
+        service_name: document.getElementById('service_name').value,
+        total_a: document.getElementById('total_a').value,
+        days: document.getElementById('days').value,
+        step: document.getElementById('step').value,
+        tolerance: document.getElementById('tolerance').value,
+        final_a: currentTimeline.reduce((s, t) => s + t.amount, 0),
+        timeline: currentTimeline
+    };
+    
+    if(!data.name || !data.link || !data.service_id) { alert("Missing Name, Link or Service ID"); return; }
+
+    const res = await fetch('/orders/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if(result.status === 'ok') {
+        alert('Collaboration Started!');
+        window.location.href = "{{ url_for('orders.manage') }}";
+    } else {
+        alert("Error: " + result.msg);
+    }
+}
+</script>
+{% endblock %}

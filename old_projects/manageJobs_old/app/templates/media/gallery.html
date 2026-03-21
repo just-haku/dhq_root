@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- External Styles -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/media_gallery.css') }}">
+
+<!-- HEADER -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center gap-2">
+        {% if current_group %}
+        <a href="{{ url_for('media.gallery') }}" class="btn btn-outline-secondary btn-sm rounded-circle" title="Back">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h3 class="fw-bold text-primary mb-0"><i class="fas fa-folder-open me-2"></i>{{ current_group.name }}</h3>
+        {% else %}
+        <h3 class="fw-bold text-primary mb-0"><i class="fas fa-photo-video me-2"></i>Media Library</h3>
+        {% endif %}
+    </div>
+    
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#customReactModal">
+            <i class="fas fa-smile me-1"></i> Reacts
+        </button>
+        {% if current_user.has_perm('gallery_create') %}
+        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+            <i class="fas fa-folder-plus me-1"></i> New Gallery
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- GALLERIES -->
+{% if not current_group and groups %}
+<div class="row g-3 mb-4">
+    {% for g in groups %}
+    <div class="col-xl-2 col-lg-3 col-md-4 col-6">
+        <div class="card h-100 folder-card bg-body-tertiary border-0 shadow-sm position-relative" 
+             onclick="window.location.href='{{ url_for('media.gallery', group_id=g.id) }}'">
+            <div class="card-body d-flex align-items-center gap-3 p-3">
+                {% if g.avatar %}
+                <img src="{{ g.avatar }}" class="rounded-circle border" width="40" height="40" style="object-fit:cover;" onerror="this.src='{{ url_for('static', filename='img/placeholder.png') }}'">
+                {% else %}
+                <i class="fas fa-folder fa-2x text-warning"></i>
+                {% endif %}
+                <div class="text-truncate fw-bold small text-body">{{ g.name }}</div>
+            </div>
+            
+            <!-- Quick Delete Button (Top Right) -->
+            {% if current_user.has_perm('gallery_delete') or current_user.id == g.creator.id %}
+            <button class="btn btn-link text-muted position-absolute top-0 end-0 p-2 text-decoration-none opacity-50 hover-opacity-100"
+                    onclick="event.stopPropagation(); confirmDeleteGroup('{{ g.id }}', '{{ g.name }}')" title="Delete Folder">
+                <i class="fas fa-times"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- FILES GRID -->
+<div class="row g-3">
+    {% for file in files %}
+    <div class="col-xl-2 col-lg-3 col-md-4 col-6" id="media-card-{{ file.id }}">
+        <div class="media-card h-100 shadow-sm bg-body-tertiary border-0 rounded-3 overflow-hidden position-relative" 
+             onclick="openLightbox('{{ file.id }}')">
+            
+            <div class="ratio ratio-1x1 bg-secondary-subtle">
+                {% if file.mimetype and file.mimetype.startswith('video') %}
+                    <!-- Video Preview (Using hashed filename) -->
+                    <video src="{{ url_for('media.serve_file', filename=file.filepath) }}" 
+                           class="object-fit-cover w-100 h-100" 
+                           preload="metadata"
+                           muted
+                           onmouseover="this.play()" 
+                           onmouseout="this.pause();this.currentTime=0;">
+                    </video>
+                    
+                    <!-- Play Overlay -->
+                    <div class="position-absolute center-icon text-white drop-shadow">
+                        <i class="fas fa-play-circle fa-3x opacity-75"></i>
+                    </div>
+                {% else %}
+                    <!-- Image Preview (Using hashed filename) -->
+                    <img src="{{ url_for('media.serve_file', filename=file.filepath) }}" 
+                         class="object-fit-cover w-100 h-100" 
+                         loading="lazy" 
+                         onerror="this.src='{{ url_for('static', filename='img/placeholder.png') }}'">
+                {% endif %}
+            </div>
+
+            <!-- Info Overlay -->
+            <div class="card-info-overlay p-2 text-white d-flex flex-column justify-content-end">
+                <div class="fw-bold text-truncate small">{{ file.filename }}</div>
+                <div class="d-flex justify-content-between small mt-1 opacity-90">
+                    <span id="card-react-{{ file.id }}">
+                        <i class="fas fa-heart text-danger"></i> {{ file.reactions|length }}
+                    </span>
+                    <span id="card-comment-{{ file.id }}">
+                        <i class="fas fa-comment"></i> {{ file.comments|length }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- UPLOAD FAB -->
+<div class="fab-container">
+    <button class="btn btn-primary btn-lg rounded-circle shadow-lg p-0 d-flex align-items-center justify-content-center hover-scale" 
+            style="width: 60px; height: 60px;" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="fas fa-plus fa-lg"></i>
+    </button>
+</div>
+
+<!-- STALL GUARD PROGRESS WIDGET -->
+<div id="upload-progress-widget" class="position-fixed bottom-0 start-0 m-3 p-3 bg-body-tertiary border rounded shadow-lg" 
+     style="width: 300px; display: none; z-index: 1050;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="fw-bold text-body text-truncate" id="uploadStatusText" style="max-width: 230px;">Uploading...</small>
+        <span id="uploadPercent" class="small text-primary">0%</span>
+    </div>
+    <div class="progress" style="height: 6px;">
+        <div id="uploadBar" class="progress-bar bg-primary progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+    </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox" class="lightbox-backdrop" style="display: none;">
+    <!-- Close Button (Fixed High Z-Index) -->
+    <button class="btn-close btn-close-white position-fixed top-0 start-0 m-3 p-3 bg-dark rounded-circle shadow z-50 hover-scale" 
+            style="width: 48px; height: 48px; filter: invert(1); z-index: 9999;" onclick="closeLightbox()"></button>
+
+    <div class="lightbox-container shadow-lg rounded-4 overflow-hidden d-flex flex-column flex-lg-row">
+        
+        <!-- MEDIA VIEW -->
+        <div class="col-lg-8 col-12 h-100-lg bg-black d-flex flex-column position-relative justify-content-center media-area">
+            
+            <!-- Media Content -->
+            <div id="lightbox-media-container" class="flex-grow-1 d-flex align-items-center justify-content-center w-100 overflow-hidden position-relative">
+                <!-- Injected via JS -->
+            </div>
+
+            <!-- Video Controls -->
+            <div id="video-controls" class="p-2 bg-dark bg-opacity-75 w-100 text-white d-none">
+                <div class="d-flex align-items-center gap-3 justify-content-center">
+                    <button class="btn btn-link text-white p-0 text-decoration-none" onclick="mediaAction('rewind')"><i class="fas fa-backward"></i> 10s</button>
+                    
+                    <div class="dropup">
+                        <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">Speed</button>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><button class="dropdown-item" onclick="mediaAction('speed', 0.5)">0.5x</button></li>
+                            <li><button class="dropdown-item" onclick="mediaAction('speed', 1.0)">1.0x</button></li>
+                            <li><button class="dropdown-item" onclick="mediaAction('speed', 1.5)">1.5x</button></li>
+                            <li><button class="dropdown-item" onclick="mediaAction('speed', 2.0)">2.0x</button></li>
+                        </ul>
+                    </div>
+
+                    <button class="btn btn-link text-white p-0 text-decoration-none" onclick="mediaAction('forward')">10s <i class="fas fa-forward"></i></button>
+                </div>
+            </div>
+
+            <!-- Nav Arrows -->
+            <button class="nav-arrow prev" onclick="navMedia(-1)"><i class="fas fa-chevron-left fa-lg"></i></button>
+            <button class="nav-arrow next" onclick="navMedia(1)"><i class="fas fa-chevron-right fa-lg"></i></button>
+            
+            <!-- Open New Tab -->
+            <a id="openInTabBtn" href="#" target="_blank" class="btn btn-sm btn-dark border border-secondary position-absolute top-0 end-0 m-3 opacity-75 hover-opacity-100 text-white">
+                <i class="fas fa-external-link-alt me-1"></i> Open
+            </a>
+        </div>
+
+        <!-- SIDEBAR INFO -->
+        <div class="col-lg-4 col-12 h-100-lg bg-body-tertiary border-start d-flex flex-column sidebar-area">
+            
+            <!-- Header -->
+            <div class="p-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="overflow-hidden">
+                        <h5 id="lb-filename" class="text-body mb-1 text-truncate fw-bold" style="max-width: 100%;"></h5>
+                        <div class="d-flex align-items-center gap-2 mt-2">
+                            <img id="lb-avatar" src="{{ url_for('static', filename='img/placeholder.png') }}" class="rounded-circle border" width="32" height="32">
+                            <div class="lh-1">
+                                <div id="lb-uploader" class="small fw-bold text-body"></div>
+                                <div id="lb-date" class="x-small text-muted"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Options -->
+                    <div class="dropdown">
+                        <button class="btn btn-link text-muted p-0" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v fa-lg"></i></button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li><button class="dropdown-item" onclick="manageFile('caption')"><i class="fas fa-pen me-2"></i> Edit Caption</button></li>
+                            <li><button class="dropdown-item" onclick="manageFile('rename')"><i class="fas fa-i-cursor me-2"></i> Rename</button></li>
+                            <li><button class="dropdown-item" onclick="savePost()"><i class="fas fa-bookmark me-2"></i> Save Post</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button class="dropdown-item text-warning" onclick="reportPost()"><i class="fas fa-flag me-2"></i> Report</button></li>
+                            <li><button class="dropdown-item text-danger" id="opt-delete" onclick="manageFile('delete')"><i class="fas fa-trash me-2"></i> Delete</button></li>
+                            <li><button class="dropdown-item text-muted" id="opt-hide" onclick="manageFile('hide')"><i class="fas fa-eye-slash me-2"></i> Hide</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div id="lb-caption" class="mt-3 small text-body text-break p-2 bg-body rounded border"></div>
+            </div>
+
+            <!-- Reactions Area -->
+            <div class="p-2 border-bottom bg-body-secondary">
+                <div id="lb-reactions-display" class="d-flex gap-2 flex-wrap mb-2 px-1" style="min-height: 28px;"></div>
+                
+                <div class="d-flex justify-content-between align-items-center px-1">
+                    <div class="d-flex gap-2 align-items-center">
+                        <!-- Quick Reacts -->
+                        <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2764.png" width="24" class="c-pointer hover-scale" onclick="react('heart')">
+                        <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f44d.png" width="24" class="c-pointer hover-scale" onclick="react('like')">
+                        <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f602.png" width="24" class="c-pointer hover-scale" onclick="react('haha')">
+                        
+                        <!-- Dropup -->
+                        <div class="dropup">
+                            <button class="btn btn-xs btn-outline-secondary rounded-circle p-0 d-flex align-items-center justify-content-center" 
+                                    style="width:24px;height:24px" data-bs-toggle="dropdown">+</button>
+                            <div class="dropdown-menu p-2 shadow-lg" style="width: 200px;">
+                                <div class="d-flex flex-wrap gap-2 justify-content-center">
+                                    {% for cr in custom_reactions %}
+                                    <img src="{{ cr.image_url }}" width="28" height="28" class="c-pointer hover-scale" onclick="react('{{ cr.name }}')" title="{{ cr.name }}">
+                                    {% endfor %}
+                                    <button class="btn btn-xs btn-light w-100 mt-2" data-bs-toggle="modal" data-bs-target="#customReactModal">Upload</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-link btn-sm text-decoration-none text-muted small p-0" onclick="removeMyReactions()">Clear Mine</button>
+                </div>
+            </div>
+
+            <!-- Comments List -->
+            <div class="flex-grow-1 overflow-auto p-3 custom-scrollbar" id="lb-comments" style="background: var(--bs-body-bg);"></div>
+
+            <!-- Footer Input -->
+            <div class="p-3 border-top bg-body-tertiary">
+                <div class="input-group">
+                    <input type="text" id="lb-comment-input" class="form-control" placeholder="Write a comment...">
+                    <button class="btn btn-primary" onclick="postComment()"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS -->
+<!-- Upload Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Upload Media</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label>Gallery</label>
+                    <select id="uploadGroup" class="form-select">
+                        <option value="">Root</option>
+                        {% for g in groups %}
+                        <option value="{{ g.id }}" {% if current_group and current_group.id == g.id %}selected{% endif %}>{{ g.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3"><label>Caption (Optional)</label><textarea id="uploadCaption" class="form-control" rows="2"></textarea></div>
+                <input type="file" id="fileInput" class="form-control mb-3" multiple>
+                <button onclick="startUpload()" class="btn btn-primary w-100">Start Upload</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Group Modal -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">New Gallery</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label>Name</label>
+                    <input type="text" id="groupName" class="form-control" placeholder="Gallery Name">
+                </div>
+                <div class="mb-3">
+                    <label>Avatar (Optional)</label>
+                    <input type="file" id="groupAvatar" class="form-control">
+                </div>
+                <button onclick="createGroup()" class="btn btn-success w-100">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom React Modal -->
+<div class="modal fade" id="customReactModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Add Reaction</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="text" id="crName" class="form-control mb-2" placeholder="Name"><input type="file" id="crFile" class="form-control"><small>Max 16</small></div><div class="modal-footer"><button onclick="uploadCustomReact()" class="btn btn-primary">Upload</button></div></div></div>
+</div>
+
+<!-- CUSTOM DELETE CONFIRMATION MODAL -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-body p-4 text-center">
+                <div class="mb-3 text-danger"><i class="fas fa-exclamation-circle fa-3x"></i></div>
+                <h5 class="fw-bold mb-2">Delete Folder?</h5>
+                <p class="text-muted small mb-4" id="delConfirmMsg">Are you sure you want to delete this?</p>
+                <div class="d-flex justify-content-center gap-2">
+                    <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-danger px-4" id="btnConfirmDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CONFIG BRIDGE -->
+<script>
+    window.GALLERY_CONFIG = {
+        currentGroupId: "{% if current_group %}{{ current_group.id }}{% endif %}",
+        allFileIds: [{% for f in files %}'{{ f.id }}',{% endfor %}],
+        placeholderUrl: "{{ url_for('static', filename='img/placeholder.png') }}",
+        error404Url: "{{ url_for('static', filename='img/404.png') }}"
+    };
+</script>
+
+<!-- External Logic -->
+<script src="{{ url_for('static', filename='js/media_gallery.js') }}"></script>
+
+{% endblock %}

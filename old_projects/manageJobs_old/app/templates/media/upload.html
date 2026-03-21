@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Upload Media</h4>
+                </div>
+                <div class="card-body">
+                    <form id="uploadForm" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <!-- File Input -->
+                        <div class="mb-4">
+                            <label for="fileInput" class="form-label">Select File</label>
+                            <input class="form-control" type="file" id="fileInput" name="file" required>
+                            <div class="form-text">
+                                Allowed: {{ config['ALLOWED_EXTENSIONS']|join(', ') }}
+                            </div>
+                        </div>
+
+                        <!-- Caption -->
+                        <div class="mb-3">
+                            <label for="caption" class="form-label">Caption / Description</label>
+                            <textarea class="form-control" id="caption" name="caption" rows="2"></textarea>
+                        </div>
+
+                        <!-- Group Selection -->
+                        <div class="mb-3">
+                            <label for="group_id" class="form-label">Assign to Group (Optional)</label>
+                            <select class="form-select" id="group_id" name="group_id">
+                                <option value="">No Group</option>
+                                {% for group in groups %}
+                                    <option value="{{ group.id }}">{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Visibility -->
+                        <div class="mb-4 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_public" name="is_public" checked>
+                            <label class="form-check-label" for="is_public">Make Public</label>
+                            <div class="form-text">If unchecked, only you and shared users can see this.</div>
+                        </div>
+
+                        <!-- Progress Bar (Hidden by default) -->
+                        <div class="progress mb-3" style="height: 25px; display: none;" id="progressContainer">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">0%</div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <!-- Changed type to button to prevent default submit, logic handled by JS -->
+                            <button type="submit" class="btn btn-primary" onclick="uploadFile(event)">Upload</button>
+                            <a href="{{ url_for('media.gallery') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function uploadFile(event) {
+    event.preventDefault(); // Stop normal form submit
+    
+    const form = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    
+    if(!file) {
+        alert("Please select a file first.");
+        return;
+    }
+
+    // Use FormData(form) to automatically grab CSRF token, caption, group, etc.
+    const formData = new FormData(form);
+
+    const xhr = new XMLHttpRequest();
+    
+    // Progress Listener
+    xhr.upload.addEventListener('progress', function(e) {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            document.getElementById('progressContainer').style.display = 'block';
+            const bar = document.getElementById('progressBar');
+            bar.style.width = percent + '%';
+            bar.innerText = percent + '%';
+        }
+    });
+
+    // Completion Listener
+    xhr.addEventListener('load', function() {
+        if(xhr.status === 200 || xhr.status === 302) {
+            // Success: Redirect to gallery
+            // Note: If backend redirects, xhr.responseURL might be the gallery URL
+            window.location.href = "{{ url_for('media.gallery') }}";
+        } else {
+            // Error handling
+            let errorMsg = 'Upload Failed';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                if(response.error) errorMsg = response.error;
+            } catch(e) {}
+            alert(errorMsg);
+            document.getElementById('progressContainer').style.display = 'none';
+        }
+    });
+
+    xhr.addEventListener('error', function() {
+        alert("Network Error");
+        document.getElementById('progressContainer').style.display = 'none';
+    });
+
+    xhr.open('POST', "{{ url_for('media.upload') }}");
+    // Important: Do not set Content-Type header manually when using FormData, 
+    // the browser sets it automatically with the correct boundary.
+    xhr.send(formData);
+}
+</script>
+{% endblock %}

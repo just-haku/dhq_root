@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="fas fa-clipboard-list text-info"></i> Task Manager</h3>
+        {% if is_admin %}
+        <span class="badge bg-danger">ADMIN VIEW</span>
+        {% else %}
+        <span class="badge bg-success">USER VIEW</span>
+        {% endif %}
+    </div>
+    
+    <!-- CREATE PANEL -->
+    <div class="card bg-dark text-white mb-4 border-primary">
+        <div class="card-body">
+            <form action="{{ url_for('admin.create_task') }}" method="POST" class="row g-2 align-items-center">
+                <div class="col-md-{{ '7' if is_admin else '9' }}">
+                    <input type="text" name="content" class="form-control bg-secondary text-white border-0" placeholder="Task description..." required>
+                </div>
+                
+                {% if is_admin %}
+                <div class="col-md-3">
+                    <select name="user_id" class="form-select bg-secondary text-white border-0">
+                        <option value="">Assign to...</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.name }} ({{ u.role }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100"><i class="fas fa-plus"></i> Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TASK LIST -->
+    <div class="card bg-dark text-white">
+        <div class="card-body p-0">
+            <table class="table table-dark table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 50%;">Task</th>
+                        {% if is_admin %}
+                        <th>Assigned To</th>
+                        <th>Assigner</th>
+                        {% endif %}
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tasks %}
+                    <tr>
+                        <form action="{{ url_for('admin.manage_task', task_id=t.id) }}" method="POST">
+                        <td>
+                            <input type="text" name="content" value="{{ t.content }}" class="form-control form-control-sm bg-transparent text-white border-0">
+                        </td>
+                        
+                        {% if is_admin %}
+                        <td>
+                            {% set assigned = users|selectattr("id", "equalto", t.user_id)|first %}
+                            <span class="badge bg-info">{{ assigned.name if assigned else 'Unknown' }}</span>
+                        </td>
+                        <td>
+                             {% set assigner = users|selectattr("id", "equalto", t.assigner_id)|first %}
+                             <small class="text-muted">{{ assigner.name if assigner else 'Self' }}</small>
+                        </td>
+                        {% endif %}
+                        
+                        <td>
+                            <span class="badge bg-{{ 'success' if t.is_done else 'warning' }}">{{ 'DONE' if t.is_done else 'PENDING' }}</span>
+                        </td>
+                        <td>
+                            <button name="action" value="toggle" class="btn btn-sm btn-outline-success" title="Toggle Status"><i class="fas fa-check"></i></button>
+                            
+                            {% if is_admin or t.user_id == current_user.id %}
+                            <button name="action" value="update" class="btn btn-sm btn-outline-info" title="Save Text"><i class="fas fa-save"></i></button>
+                            <button name="action" value="delete" class="btn btn-sm btn-outline-danger" title="Delete"><i class="fas fa-trash"></i></button>
+                            {% endif %}
+                        </td>
+                        </form>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">No tasks found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

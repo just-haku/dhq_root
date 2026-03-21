@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <title>Operator API Settings</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='darkmode.css') }}">
+    <style>
+      body {
+        background-color: #f5f7fa;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .navbar {
+        border-bottom: 1px solid #ccc;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        max-height: 100vh;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('operator.index') }}">Chaos Plot Manager</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+                aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <li class="nav-item me-2">
+              <button id="modeToggle" class="btn btn-outline-secondary">Dark Mode</button>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link btn btn-outline-primary" href="{{ url_for('auth.logout') }}">Logout</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+    
+    <div class="container mt-4">
+      <div class="card p-3">
+        <h3>Global API Settings</h3>
+        <form id="globalApiForm">
+          <div class="mb-3">
+            <label for="api_url" class="form-label">API URL:</label>
+            <input type="text" class="form-control" id="api_url" name="api_url" 
+                   value="{{ global_settings.api_url|default('')|e }}" placeholder="https://example.com/api/v2">
+          </div>
+          <div class="mb-3">
+            <label for="api_key" class="form-label">API Key:</label>
+            <input type="text" class="form-control" id="api_key" name="api_key"
+                   value="{{ global_settings.api_key|default('')|e }}">
+          </div>
+          <div class="mb-3">
+            <label for="order_cmd" class="form-label">Order Command:</label>
+            <input type="text" class="form-control" id="order_cmd" name="order_cmd"
+                   value="{{ global_settings.order_cmd|default('add')|e }}">
+          </div>
+          <div class="mb-3">
+            <label for="status_cmd" class="form-label">Status Command:</label>
+            <input type="text" class="form-control" id="status_cmd" name="status_cmd"
+                   value="{{ global_settings.status_cmd|default('status')|e }}">
+          </div>
+          <div class="mb-3">
+            <label for="balance_cmd" class="form-label">Balance Command:</label>
+            <input type="text" class="form-control" id="balance_cmd" name="balance_cmd"
+                   value="{{ global_settings.balance_cmd|default('balance')|e }}">
+          </div>
+          <!-- Buttons to save settings and check balance -->
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary flex-fill" id="saveSettingsBtn">Save Settings</button>
+            <button type="button" class="btn btn-success flex-fill" id="checkBalanceBtn">Check Balance</button>
+          </div>
+        </form>
+        
+        <!-- Balance Result -->
+        <div class="mt-3">
+          <h5>Balance:</h5>
+          <div id="balanceResultBox">N/A</div>
+        </div>
+        
+        <!-- Back to Dashboard Button -->
+        <div class="mt-3">
+          <a href="{{ url_for('operator.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Dark Mode Toggle Script -->
+    <script>
+      const modeToggle = document.getElementById('modeToggle');
+      if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+        modeToggle.innerText = 'Light Mode';
+      }
+      modeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+          localStorage.setItem('darkMode', 'enabled');
+          modeToggle.innerText = 'Light Mode';
+        } else {
+          localStorage.setItem('darkMode', 'disabled');
+          modeToggle.innerText = 'Dark Mode';
+        }
+      });
+    </script>
+    
+    <!-- Save & Check Balance Scripts -->
+    <script>
+      document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+        if (!confirm("Save global API settings?")) return;
+        let formData = new FormData(document.getElementById('globalApiForm'));
+        fetch("{{ url_for('operator.save_global_api_settings') }}", {
+          method: "POST",
+          body: formData
+        })
+        .then(resp => resp.text())
+        .then(msg => {
+          alert("Settings saved: " + msg);
+          location.reload();
+        })
+        .catch(err => alert("Error saving settings: " + err));
+      });
+      
+      document.getElementById('checkBalanceBtn').addEventListener('click', function() {
+        fetch("{{ url_for('operator.check_global_balance') }}", { method: "POST" })
+          .then(resp => resp.json())
+          .then(data => {
+            if (data.balance) {
+              document.getElementById('balanceResultBox').innerText =
+                data.balance + " " + (data.currency || "");
+            } else {
+              document.getElementById('balanceResultBox').innerText =
+                JSON.stringify(data);
+            }
+          })
+          .catch(err => {
+            document.getElementById('balanceResultBox').innerText = "Error: " + err;
+          });
+      });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

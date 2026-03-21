@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ plot.plot_name|e }} - User Plot View</title>
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Dark Mode CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='darkmode.css') }}">
+    <!-- Plotly Library -->
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+      body {
+        background-color: #f5f7fa;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .navbar {
+        border-bottom: 1px solid #ccc;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        max-height: 100vh;
+        overflow-y: auto;
+      }
+      #plotDiv {
+        border: 1px solid #ddd;
+        border-radius: 0.5rem;
+        background: #fff;
+      }
+      .done {
+        text-decoration: line-through;
+        opacity: 0.6;
+      }
+      #orderFormDisplay {
+        display: none;
+      }
+      #notifContainer {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 9999;
+      }
+      .centered-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 9999;
+      }
+      .centered-modal {
+        background: #fff;
+        padding: 20px 30px;
+        border-radius: 8px;
+        text-align: center;
+        max-width: 400px;
+      }
+      .dark-mode .centered-overlay {
+        background: rgba(0, 0, 0, 0.8);
+      }
+      .dark-mode .centered-modal {
+        background: #333;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Notification Container -->
+    <div id="notifContainer"></div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="centered-overlay" style="display: none;">
+      <div class="centered-modal">
+        <h4 id="confirmTitle"></h4>
+        <p id="confirmMessage"></p>
+        <div class="mt-3 d-flex justify-content-center gap-2">
+          <button id="confirmYes" class="btn btn-primary">Yes</button>
+          <button id="confirmNo" class="btn btn-secondary">No</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Centered Notification Modal -->
+    <div id="notificationModal" class="centered-overlay" style="display: none;">
+      <div class="centered-modal">
+        <p id="notificationMessage"></p>
+      </div>
+    </div>
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('user.index') }}">Chaos Plot Manager</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+                aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <li class="nav-item me-2">
+              <button id="modeToggle" class="btn btn-outline-secondary">Light Mode</button>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link btn btn-outline-primary" href="{{ url_for('auth.logout') }}">Logout</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+      <div class="row">
+        <!-- Sidebar: User Menu & User Info -->
+        <div class="col-md-3 sidebar">
+          <div class="card p-3 mb-4">
+            <h3>User Menu</h3>
+            <ul class="list-group">
+              <li class="list-group-item">
+                <a href="{{ url_for('user.index') }}">Dashboard</a>
+              </li>
+            </ul>
+          </div>
+          {% if user %}
+          <div class="card p-3 mb-4">
+            <h4>User: {{ user.username }}</h4>
+            <p>ID: {{ user._id }}</p>
+          </div>
+          {% endif %}
+          {% if plots %}
+          <div class="card p-3">
+            <h5>{{ user.username }}'s Plots</h5>
+            <ul class="list-group">
+              {% for p in plots %}
+                <li class="list-group-item d-flex justify-content-between align-items-center {% if p._id == plot._id %}active{% endif %}">
+                  <a href="{{ url_for('user.plot_view', plot_id=p._id) }}">{{ p.plot_name }}</a>
+                  <span class="badge bg-secondary">{{ p.x_total }} hrs</span>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Main Content: Plot View + Order Settings + Timeline -->
+        <div class="col-md-9">
+          <!-- Plot Card -->
+          <div class="card p-3 mb-4" style="width: 100%;">
+            <h2>{{ plot.plot_name|e }}</h2>
+            <!-- Plotly Chart -->
+            <div id="plotDiv" style="width: 100%; height: 500px;"></div>
+            <div class="mt-2">
+              <button id="hoverToggleBtn" class="btn btn-outline-info">Toggle Hover Mode</button>
+            </div>
+            <!-- Slider & Numeric Input -->
+            <div class="mt-3 d-flex align-items-center">
+              <label for="slider" class="form-label me-2">Current Step: <span id="current_x_display">0</span></label>
+              <input type="range" class="form-range me-3" id="slider"
+                     min="0" max="{{ (plot.x_total * 60) // (plot.a_step_minutes|default(60)) }}" value="0"
+                     style="width:200px;">
+              <input type="number" id="xInput" class="form-control" style="width:100px;"
+                     min="0" max="{{ (plot.x_total * 60) // (plot.a_step_minutes|default(60)) }}" value="0">
+            </div>
+            <p class="mt-2">
+              Hourly Addition (a): <span id="a_val_display"></span><br>
+              Total Units (y): <span id="y_val_display"></span><br>
+              Seed: <span id="seed_display">{{ plot.seed|e }}</span>
+            </p>
+            <!-- Rename Plot Form -->
+            <form method="post" class="mt-4" action="{{ url_for('user.rename_plot', plot_id=plot._id) }}">
+              <div class="input-group">
+                <input type="text" class="form-control" name="plot_name" placeholder="Rename Plot">
+                <button type="submit" class="btn btn-outline-primary">Rename Plot</button>
+              </div>
+            </form>
+            <!-- Delete Plot Button -->
+            <div class="mt-3">
+              <form action="{{ url_for('user.delete_plot', plot_id=plot._id) }}" method="post"
+                    onsubmit="return confirm('Are you sure you want to delete this plot?');">
+                <button type="submit" class="btn btn-danger">Delete Plot</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Order Settings Card -->
+          <div class="card p-3 mb-4" style="width: 100%;">
+            <h4>Order Settings</h4>
+            <form id="orderSettingsForm">
+              <!-- Global API settings (read-only) -->
+              <div class="mb-2">
+                <label>Global API URL:</label>
+                <input type="text" class="form-control" 
+                      value="{{ global_api_settings.api_url|default('')|e }}" readonly>
+              </div>
+              <div class="mb-2">
+                <label>Global API Key:</label>
+                <input type="text" class="form-control" 
+                      value="{{ global_api_settings.api_key|default('')|e|censor_api_key }}" readonly>
+              </div>
+              
+              <!-- Plot-specific settings -->
+              <div class="mb-2">
+                <label>Service ID:</label>
+                <input type="text" class="form-control" name="service_id"
+                      value="{{ plot.order_settings.service_id|default('')|e }}">
+              </div>
+              <div class="mb-2">
+                <label>Link:</label>
+                <input type="text" class="form-control" name="link"
+                      value="{{ plot.order_settings.link|default('')|e }}">
+              </div>
+              <div class="mb-2">
+                <label>Balance:</label>
+                <div class="form-control" id="balanceDisplayBox">
+                  {% if plot.order_settings.last_balance %}
+                    {{ plot.order_settings.last_balance }} {{ plot.order_settings.last_currency }}
+                  {% else %}
+                    N/A
+                  {% endif %}
+                </div>
+              </div>
+              <div class="d-flex gap-2">
+                <button type="button" id="saveOrderSettingsBtn" class="btn btn-primary flex-fill">Save Settings</button>
+                <button type="button" id="linkApiBtn" class="btn btn-success flex-fill">Link API</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Timeline Table -->
+          <div class="card p-3 mb-4" style="width: 100%;">
+            <h4>Timeline (24-hour Date/Time)</h4>
+            <table class="table table-sm table-bordered">
+              <thead>
+                <tr>
+                  <th>x</th>
+                  <th>Order Status</th>
+                  <th>Date/Time</th>
+                  <th>a</th>
+                  <th>y</th>
+                  <th>Done</th>
+                  <th>
+                    Order?
+                    <input type="checkbox" id="toggleAllOrders" style="margin-left:5px;">
+                  </th>
+                  <th>Now?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in plot.timeline|default([]) %}
+                <tr id="row-{{ row.step }}"
+                    class="{% if row.done or (plot.orders and (row.step|string in plot.orders) and plot.orders[row.step|string].status|lower in ['success','sent','completed','partial','canceled']) %}done{% endif %}">
+                  <td>{{ row.step }}</td>
+                  <td id="orderStatus-{{ row.step }}">
+                    {% set step_str = row.step|string %}
+                    {% set order_info = (plot.orders[step_str] if plot.orders and step_str in plot.orders else {}) %}
+                    {% set order_id = order_info.order_id if order_info.order_id is defined else "" %}
+                    {% set status = order_info.status|default('none') %}
+                    {% if status|lower == 'pending' %}
+                      <span class="badge bg-warning">Pending{% if order_id %} (#{{ order_id }}){% endif %}</span>
+                    {% elif status|lower in ['success','sent','completed'] %}
+                      <span class="badge bg-success">{{ status|capitalize }}{% if order_id %} (#{{ order_id }}){% endif %}</span>
+                    {% elif status|lower == 'failed' %}
+                      <span class="badge bg-danger">Failed{% if order_id %} (#{{ order_id }}){% endif %}</span>
+                    {% elif status|lower == 'partial' %}
+                      <span class="badge bg-info">Partial{% if order_id %} (#{{ order_id }}){% endif %}</span>
+                    {% elif status|lower == 'canceled' %}
+                      <span class="badge bg-secondary">Canceled{% if order_id %} (#{{ order_id }}){% endif %}</span>
+                    {% else %}
+                      <span class="badge bg-secondary">None</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <input type="datetime-local" class="form-control timestamp-input" data-x="{{ row.step }}" value="{{ row.datetime }}">
+                  </td>
+                  <td>{{ row.a|round(0)|int }}</td>
+                  <td>{{ row.y|round(0)|int }}</td>
+                  <td>
+                    <input type="checkbox" class="timestamp-done-checkbox" data-x="{{ row.step }}" {% if row.done %}checked{% endif %}>
+                  </td>
+                  <td>
+                    <input type="checkbox" class="order-checkbox" data-x="{{ row.step }}" {% if order_info.order %}checked{% endif %}>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-danger send-now-btn" data-x="{{ row.step }}">NOW!!!</button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Order Details Display -->
+          <div id="orderFormDisplay" class="card p-3 mb-4" style="width: 100%; display:none;">
+            <h4>Order Details</h4>
+            <div id="orderDetailsList"></div>
+          </div>
+
+        </div> <!-- End col-md-9 -->
+      </div> <!-- End row -->
+    </div> <!-- End container-fluid -->
+
+    <!-- Dark/Light Mode & Plotly Setup Scripts -->
+    <script>
+      // Plotly setup
+      function applyDarkModePlotly() {
+        try {
+          Plotly.relayout('plotDiv', {
+            'paper_bgcolor': '#121212',
+            'plot_bgcolor': '#1e1e1e',
+            'font.color': '#e0e0e0'
+          });
+        } catch(e) { console.error(e); }
+      }
+      function applyLightModePlotly() {
+        try {
+          Plotly.relayout('plotDiv', {
+            'paper_bgcolor': '#f5f7fa',
+            'plot_bgcolor': '#ffffff',
+            'font.color': '#000000'
+          });
+        } catch(e) { console.error(e); }
+      }
+      const modeToggle = document.getElementById('modeToggle');
+      modeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+          localStorage.setItem('darkMode', 'enabled');
+          modeToggle.innerText = 'Light Mode';
+          applyDarkModePlotly();
+        } else {
+          localStorage.setItem('darkMode', 'disabled');
+          modeToggle.innerText = 'Dark Mode';
+          applyLightModePlotly();
+        }
+      });
+      if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+        modeToggle.innerText = 'Light Mode';
+      } else {
+        modeToggle.innerText = 'Dark Mode';
+      }
+    </script>
+
+    <script>
+      // Notification system
+      function showNotification(message, type = "success") {
+        const container = document.getElementById("notifContainer");
+        const alertDiv = document.createElement("div");
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.setAttribute("role", "alert");
+        alertDiv.innerHTML = `${message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+        container.appendChild(alertDiv);
+        setTimeout(() => {
+          alertDiv.classList.remove("show");
+          setTimeout(() => { alertDiv.remove(); }, 200);
+        }, 3000);
+      }
+
+      // Modal confirmations
+      function showCenterConfirm(title, message, onYes, onNo) {
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmTitle = document.getElementById('confirmTitle');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const yesBtn = document.getElementById('confirmYes');
+        const noBtn = document.getElementById('confirmNo');
+        confirmTitle.textContent = title;
+        confirmMessage.textContent = message;
+        confirmModal.style.display = 'flex';
+        yesBtn.onclick = function() {
+          confirmModal.style.display = 'none';
+          if (typeof onYes === 'function') onYes();
+        };
+        noBtn.onclick = function() {
+          confirmModal.style.display = 'none';
+          if (typeof onNo === 'function') onNo();
+        };
+      }
+      function showCenterNotification(message, durationSeconds = 5) {
+        const notificationModal = document.getElementById('notificationModal');
+        const notificationMessage = document.getElementById('notificationMessage');
+        notificationMessage.textContent = message;
+        notificationModal.style.display = 'flex';
+        setTimeout(() => {
+          notificationModal.style.display = 'none';
+        }, durationSeconds * 1000);
+      }
+    </script>
+
+    <!-- Build the timeline chart with Plotly -->
+    <script>
+      var timeline = {{ plot.timeline|default([])|tojson }};
+      var xVals = timeline.map(item => item.step);
+      var aVals = timeline.map(item => item.a);
+      var yVals = timeline.map(item => item.y);
+      var traceY = {
+        x: xVals,
+        y: yVals,
+        mode: 'lines+markers',
+        name: 'Total Units (y)',
+        line: { color: 'navy' },
+        hovertemplate: 'Step: %{x}<br>y: %{y}<extra></extra>'
+      };
+      var traceA = {
+        x: xVals,
+        y: aVals,
+        type: 'bar',
+        name: 'Hourly Addition (a)',
+        marker: { color: 'coral' },
+        hovertemplate: 'Step: %{x}<br>a: %{y}<extra></extra>'
+      };
+      let shapeLine = {
+        type: 'line',
+        xref: 'x',
+        yref: 'y',
+        x0: (xVals.length > 0 ? xVals[0] : 0),
+        x1: (xVals.length > 0 ? xVals[0] : 0),
+        y0: 0,
+        y1: Math.max(...yVals),
+        line: { color: 'lime', width: 3, dash: 'dashdot' }
+      };
+      let chartLayout = {
+        title: 'Chaotic Progress Visualization<br>Target: {{ plot.y_total }} ±{{ (plot.tol|default(0)) * 100 }}%',
+        xaxis: { title: 'Steps', range: [0, {{ (plot.x_total * 60) // (plot.a_step_minutes|default(60)) }}] },
+        yaxis: { title: 'Units' },
+        hovermode: 'closest',
+        shapes: [shapeLine]
+      };
+      Plotly.newPlot('plotDiv', [traceY, traceA], chartLayout).then(() => {
+        if (document.body.classList.contains('dark-mode')) {
+          applyDarkModePlotly();
+        } else {
+          applyLightModePlotly();
+        }
+      });
+      const hoverToggleBtn = document.getElementById('hoverToggleBtn');
+      hoverToggleBtn.addEventListener('click', function() {
+        let newMode = (chartLayout.hovermode === 'closest') ? 'x unified' : 'closest';
+        chartLayout.hovermode = newMode;
+        Plotly.relayout('plotDiv', { 'hovermode': newMode });
+      });
+    </script>
+
+    <!-- Expose the entire plot object to JS so we can safely reference it -->
+    <script>
+      var plotData = {{ plot|tojson_str|safe }};
+    </script>
+
+    <!-- Slider & Numeric Input Sync -->
+    <script>
+      const slider = document.getElementById('slider');
+      const xInput = document.getElementById('xInput');
+      const currentXDisplay = document.getElementById('current_x_display');
+      const aValDisplay = document.getElementById('a_val_display');
+      const yValDisplay = document.getElementById('y_val_display');
+      if (xVals.length > 0) {
+        currentXDisplay.innerText = xVals[0];
+        aValDisplay.innerText = Math.round(aVals[0]);
+        yValDisplay.innerText = Math.round(yVals[0]);
+      }
+      function updatePlot(newX) {
+        let currentX = Number(newX);
+        currentXDisplay.innerText = currentX;
+        Plotly.relayout('plotDiv', {
+          'shapes[0].x0': currentX,
+          'shapes[0].x1': currentX
+        });
+        aValDisplay.innerText = Math.round(aVals[currentX]);
+        yValDisplay.innerText = Math.round(yVals[currentX]);
+        updateOrderForm();
+      }
+      slider.addEventListener('input', function() {
+        xInput.value = this.value;
+        updatePlot(this.value);
+      });
+      xInput.addEventListener('input', function() {
+        let val = parseInt(this.value);
+        if (isNaN(val)) return;
+        let maxVal = {{ (plot.x_total * 60) // (plot.a_step_minutes|default(60)) }};
+        if (val < 0) val = 0;
+        if (val > maxVal) val = maxVal;
+        slider.value = val;
+        updatePlot(val);
+      });
+    </script>
+
+    <!-- Checkboxes & Timestamp Updates -->
+    <script>
+      // Mark step done
+      document.querySelectorAll('.timestamp-done-checkbox').forEach(chk => {
+        chk.addEventListener('change', function() {
+          let x = this.getAttribute('data-x');
+          let done = this.checked;
+          fetch("{{ url_for('user.toggle_timestamp_done', plot_id=plot._id) }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ x: x, done: done })
+          })
+          .then(resp => resp.text())
+          .then(() => {
+            let row = document.getElementById('row-' + x);
+            if (done) {
+              row.classList.add('done');
+              showNotification(`Step ${x} marked as DONE`);
+            } else {
+              row.classList.remove('done');
+              showNotification(`Step ${x} marked as NOT done`, "warning");
+            }
+          });
+        });
+      });
+      // Timestamp input
+      document.querySelectorAll('.timestamp-input').forEach(inp => {
+        inp.addEventListener('change', function() {
+          let x = this.getAttribute('data-x');
+          let newTimestamp = this.value;
+          fetch("{{ url_for('user.update_timestamp_override', plot_id=plot._id) }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ x: x, timestamp: newTimestamp })
+          })
+          .then(resp => resp.text())
+          .then(() => console.log(`Timestamp updated for step ${x}`));
+        });
+      });
+      // "Order?" checkbox
+      document.querySelectorAll('.order-checkbox').forEach(chk => {
+        chk.addEventListener('change', function() {
+          let x = this.getAttribute('data-x');
+          let row = document.getElementById('row-' + x);
+          if (row.classList.contains('done')) {
+            // if done, ignore
+            this.checked = true;
+            return;
+          }
+          let order = this.checked;
+          fetch("{{ url_for('user.toggle_order', plot_id=plot._id) }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ x: x, order: order })
+          })
+          .then(resp => resp.text())
+          .then(() => {
+            let badgeCell = document.getElementById("orderStatus-" + x);
+            if (order) {
+              badgeCell.innerHTML = '<span class="badge bg-warning">Pending</span>';
+              showNotification(`Order enabled for step ${x}`);
+            } else {
+              badgeCell.innerHTML = '<span class="badge bg-secondary">Not Ordered</span>';
+              showNotification(`Order disabled for step ${x}`, "warning");
+            }
+            updateOrderForm();
+          });
+        });
+      });
+    </script>
+
+    <!-- Master Toggle for Order? Checkboxes -->
+    <script>
+    document.getElementById('toggleAllOrders').addEventListener('change', async function() {
+      const masterChecked = this.checked;
+      // Show a "please wait" notification
+      showCenterNotification("Updating all orders, please wait...", 5);
+
+      try {
+        // 1) Make a single POST request to toggle all orders
+        const response = await fetch("{{ url_for('user.toggle_all_orders', plot_id=plot._id) }}", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ order: masterChecked })
+        });
+        const text = await response.text();
+
+        // 2) After the server returns, update the checkboxes and badges in the UI
+        const checkboxes = document.querySelectorAll('.order-checkbox');
+        checkboxes.forEach(chk => {
+          const x = chk.getAttribute('data-x');
+          const badgeCell = document.getElementById("orderStatus-" + x);
+          chk.checked = masterChecked;
+          if (masterChecked) {
+            badgeCell.innerHTML = '<span class="badge bg-warning">Pending</span>';
+          } else {
+            badgeCell.innerHTML = '<span class="badge bg-secondary">Not Ordered</span>';
+          }
+        });
+
+        // 3) Update the order form details display
+        updateOrderForm();
+
+        // 4) Finally, show a success notification
+        showNotification("All orders updated. " + text, "success");
+
+      } catch (err) {
+        console.error("Error toggling all orders", err);
+        showNotification("Error updating orders: " + err, "danger");
+      }
+    });
+    </script>
+
+    <!-- Save Settings, Link API & NOW Button -->
+    <script>
+      const saveOrderSettingsBtn = document.getElementById('saveOrderSettingsBtn');
+      saveOrderSettingsBtn.addEventListener('click', function() {
+        if (!confirm("Save order settings and reload page?")) return;
+        let formData = new FormData(document.getElementById('orderSettingsForm'));
+        fetch("{{ url_for('user.save_order_settings', plot_id=plot._id) }}", {
+          method: "POST",
+          body: formData
+        })
+        .then(resp => resp.text())
+        .then(() => {
+          alert("Order settings saved");
+          location.reload();
+        });
+      });
+      document.getElementById('linkApiBtn').addEventListener('click', function() {
+        fetch("{{ url_for('user.link_api', plot_id=plot._id) }}", { method: "POST" })
+          .then(resp => resp.json())
+          .then(result => {
+            if (result.status === "linked") {
+              document.getElementById('balanceDisplayBox').innerText =
+                result.balance + " " + result.currency;
+              showNotification(result.message, "success");
+            } else {
+              showNotification("API linking failed: " + result.message, "danger");
+            }
+          })
+          .catch(err => showNotification("API linking error: " + err, "danger"));
+      });
+      // "NOW!!!" button
+      document.querySelectorAll('.send-now-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          let x = this.getAttribute('data-x');
+          showCenterConfirm(
+            `Send immediate order for step ${x}?`,
+            "Are you sure you want to proceed?",
+            function onYes() {
+              fetch("{{ url_for('user.send_order_now', plot_id=plot._id) }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ x: x })
+              })
+              .then(resp => resp.json())
+              .then(result => {
+                if (result.status === "sent" || result.status === "success") {
+                  let row = document.getElementById('row-' + x);
+                  if (row) row.classList.add('done');
+                  let shortMessage = `Ordered successfully. Status: ${result.status}.`;
+                  if (result.order_id) {
+                    shortMessage += ` Order ID: #${result.order_id}.`;
+                  }
+                  if (result.balance && result.currency) {
+                    shortMessage += ` New Balance: ${result.balance} ${result.currency}.`;
+                    document.getElementById('balanceDisplayBox').innerText =
+                      result.balance + " " + result.currency;
+                  }
+                  showCenterNotification(shortMessage, 5);
+                  updateOrderForm();
+                } else if (result.status === "failed") {
+                  showCenterNotification("Order failed: " + JSON.stringify(result), 5);
+                  updateOrderForm();
+                } else if (result.error) {
+                  showCenterNotification("Order error: " + result.error, 5);
+                }
+              })
+              .catch(err => showCenterNotification("NOW order failed: " + err, 5));
+            },
+            function onNo() {}
+          );
+        });
+      });
+    </script>
+
+    <!-- Order Details Display Logic -->
+    <script>
+      var aVals = timeline.map(item => item.a);
+
+      function updateOrderForm() {
+        let orders = document.querySelectorAll('.order-checkbox');
+        let orderDetailsList = document.getElementById('orderDetailsList');
+        let detailsHtml = "";
+
+        orders.forEach(chk => {
+          if (chk.checked) {
+            let x = chk.getAttribute('data-x');
+            let dtInput = document.querySelector('.timestamp-input[data-x="'+ x +'"]');
+            let computedTime = dtInput ? dtInput.value : "";
+            let eta = "N/A";
+            if (computedTime) {
+              let orderTime = new Date(computedTime);
+              let now = new Date();
+              let diffMins = Math.max(Math.round((orderTime - now) / 60000), 0);
+              eta = diffMins + " min";
+            }
+            let quantity = Math.round(aVals[x]);
+
+            detailsHtml += `<div class="mb-2"><strong>Order for step ${x}:</strong><br>
+                            Link: ${plotData.order_settings.link || "Not set"}<br>
+                            Service ID: ${plotData.order_settings.service_id || "Not set"}<br>
+                            Quantity: ${quantity}<br>
+                            Time for order: ${computedTime}<br>
+                            ETA: ${eta}</div>`;
+          }
+        });
+
+        if (detailsHtml) {
+          orderDetailsList.innerHTML = detailsHtml;
+          document.getElementById('orderFormDisplay').style.display = "block";
+        } else {
+          document.getElementById('orderFormDisplay').style.display = "none";
+        }
+      }
+      updateOrderForm();
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

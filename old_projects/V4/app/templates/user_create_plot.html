@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <title>Create New Chaos Plot</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='darkmode.css') }}">
+    <style>
+      body {
+        background-color: #f5f7fa;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .navbar {
+        border-bottom: 1px solid #ccc;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        max-height: 100vh;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('user.index') }}">Chaos Plot Generator</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false"
+                aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <li class="nav-item me-2">
+              <button id="modeToggle" class="btn btn-outline-secondary">Dark Mode</button>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link btn btn-outline-primary" href="{{ url_for('auth.logout') }}">Logout</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+    
+    <!-- Main Container -->
+    <div class="container-fluid mt-4">
+      <div class="row">
+        <!-- Sidebar: Plot History -->
+        <div class="col-md-4 sidebar">
+          <div class="card p-3 mb-4">
+            <h3>My Plots</h3>
+            <ul class="list-group">
+              {% if plots %}
+                {% for plot in plots %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <a href="{{ url_for('user.plot_view', plot_id=plot._id) }}">{{ plot.plot_name }}</a>
+                    <form action="{{ url_for('user.delete_plot', plot_id=plot._id) }}" method="post"
+                          onsubmit="return confirm('Delete this plot?');">
+                      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                  </li>
+                {% endfor %}
+              {% else %}
+                <li class="list-group-item">No plots created yet.</li>
+              {% endif %}
+            </ul>
+          </div>
+        </div>
+        
+        <!-- Main Content: New Plot Form -->
+        <div class="col-md-8">
+          <div class="card p-3">
+            <h3>Create a New Plot</h3>
+            <form id="plotForm" method="post" action="{{ url_for('user.create_plot_route') }}">
+              <div class="mb-3">
+                <label for="plot_name" class="form-label">Plot Name:</label>
+                <input type="text" class="form-control" id="plot_name" name="plot_name"
+                       placeholder="Enter plot name (default: seed)">
+              </div>
+              <div class="mb-3">
+                <label for="x_total" class="form-label">Total Time (hrs):</label>
+                <input type="number" class="form-control" id="x_total" name="x_total"
+                       placeholder="e.g., 24" required>
+              </div>
+              <div class="mb-3">
+                <label for="y_total" class="form-label">Total Count (units):</label>
+                <input type="number" step="any" class="form-control" id="y_total" name="y_total"
+                       placeholder="e.g., 1000" required>
+              </div>
+              <!-- Hidden field for current step (default 0) -->
+              <input type="hidden" name="current_x" value="0">
+              <div class="mb-3">
+                <label for="tol" class="form-label">Tolerance for Total (y) (%) (default 0%):</label>
+                <input type="number" step="any" class="form-control" id="tol" name="tol" value="0">
+              </div>
+              <div class="mb-3">
+                <label for="a_tol" class="form-label">Tolerance for Hourly Addition (a) (%) (default 30%):</label>
+                <input type="number" step="any" class="form-control" id="a_tol" name="a_tol" value="30">
+              </div>
+              <div class="mb-3">
+                <label for="a_step_minutes" class="form-label">Step Size (minutes):</label>
+                <input type="number" class="form-control" id="a_step_minutes" name="a_step_minutes" value="60">
+              </div>
+              <div class="mb-3">
+                <label for="start_datetime" class="form-label">Start Date & Time:</label>
+                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime">
+              </div>
+              <div class="mb-3">
+                <label for="seed" class="form-label">Seed (optional):</label>
+                <input type="text" class="form-control" id="seed" name="seed"
+                       placeholder="Enter seed (optional)">
+              </div>
+              <div class="d-flex justify-content-between">
+                <button type="submit" class="btn btn-primary">Create Plot</button>
+                <button type="button" class="btn btn-warning" onclick="resetForm()">Reset</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Dark Mode Toggle Script -->
+    <script>
+      const modeToggle = document.getElementById('modeToggle');
+      if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+        modeToggle.innerText = 'Light Mode';
+      }
+      modeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+          localStorage.setItem('darkMode', 'enabled');
+          modeToggle.innerText = 'Light Mode';
+        } else {
+          localStorage.setItem('darkMode', 'disabled');
+          modeToggle.innerText = 'Dark Mode';
+        }
+      });
+      
+      function resetForm() {
+        document.getElementById('plotForm').reset();
+      }
+    </script>
+    
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

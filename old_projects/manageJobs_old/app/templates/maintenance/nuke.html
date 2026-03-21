@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-danger shadow-lg">
+                <div class="card-header bg-danger text-white text-center">
+                    <h2 class="mb-0">⚠️ DANGER ZONE ⚠️</h2>
+                </div>
+                <div class="card-body text-center">
+                    <h5 class="card-title text-danger">SYSTEM RESET</h5>
+                    <p class="card-text">
+                        You are about to <strong>PERMANENTLY DELETE</strong> all database records and uploaded files.
+                        <br>This action cannot be undone.
+                    </p>
+                    
+                    <hr>
+
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3 text-start">
+                            <label class="form-label text-muted small">Confirmation String</label>
+                            <input type="text" class="form-control" name="confirm_text" placeholder="Type 'NUKE' here" required>
+                        </div>
+
+                        <div class="mb-4 text-start">
+                            <label class="form-label text-muted small">Nuke Password (.env)</label>
+                            <input type="password" class="form-control" name="nuke_password" placeholder="Secret Password" required>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-outline-danger btn-lg">
+                                <i class="fas fa-radiation"></i> NUKE EVERYTHING
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-muted text-center small">
+                    This event will be logged.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

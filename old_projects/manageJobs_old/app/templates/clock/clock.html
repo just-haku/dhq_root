@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLOK</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Inter:wght@400;600&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/clock.css') }}" />
+  </head>
+<body>
+  <!-- Layers -->
+  <div id="background-layer"></div>
+  <div id="alignment-grid">
+      <div class="grid-line v-mid"></div>
+      <div class="grid-line h-mid"></div>
+  </div>
+
+  <!-- Clock Elements -->
+  <div id="clock-container">
+    <div class="chunk" id="hours">00</div>
+    <div class="chunk sep" id="sep1">:</div>
+    <div class="chunk" id="minutes">00</div>
+    <div class="chunk sep" id="sep2">:</div>
+    <div class="chunk" id="seconds">00</div>
+  </div>
+
+  <div id="date-display" class="draggable-ui" style="display:none;">Loading Date...</div>
+
+  <!-- UI Interactivity Zones -->
+  <div class="corner-hitbox left"></div>
+  <div class="corner-hitbox right"></div>
+
+  <div class="top-controls">
+    <button id="topStart" title="Start Timer/Stopwatch"><i class="fas fa-play"></i></button>
+    <button id="topPause" title="Pause"><i class="fas fa-pause"></i></button>
+    <button id="topStop" title="Reset"><i class="fas fa-undo"></i></button>
+  </div>
+  
+  <button id="toggle-layout-button" title="Toggle Layout"><i class="fas fa-columns"></i></button>
+  <button id="settings-button" title="Settings"><i class="fas fa-cog"></i></button>
+
+  <!-- CUSTOM MODAL -->
+  <div id="custom-modal" class="modal-overlay" style="display:none;">
+      <div class="modal-box">
+          <h3 id="modal-title">Confirm</h3>
+          <p id="modal-msg">Are you sure?</p>
+          <div class="modal-actions">
+              <button id="modal-no" class="btn-secondary">Cancel</button>
+              <button id="modal-yes" class="btn-danger">Confirm</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Settings Panel -->
+  <div id="settings-panel">
+    <div class="settings-tabs main-tabs">
+      <button class="tab-button active" data-tab="mode-tab"><i class="fas fa-clock"></i></button>
+      <button class="tab-button" data-tab="background-tab"><i class="fas fa-image"></i></button>
+      <button class="tab-button" data-tab="digits-tab"><i class="fas fa-font"></i></button>
+      <button class="tab-button" data-tab="layout-tab"><i class="fas fa-th"></i></button>
+      <button class="tab-button" data-tab="style-tab"><i class="fas fa-magic"></i></button>
+      <button class="tab-button" data-tab="audio-tab"><i class="fas fa-volume-up"></i></button>
+      <button class="tab-button" data-tab="shortcuts-tab"><i class="fas fa-keyboard"></i></button>
+    </div>
+
+    <!-- 1. Mode -->
+    <div class="tab-content active" id="mode-tab">
+      <h3>Mode & Timing</h3>
+      <label>Mode</label>
+      <select id="mode-select">
+        <option value="clock">Clock (Realtime)</option>
+        <option value="timer">Timer</option>
+        <option value="stopwatch">Stopwatch</option>
+      </select>
+
+      <div id="timer-settings" style="display:none;" class="mb-2">
+        <label>Duration (Seconds)</label>
+        <div class="d-flex gap-2">
+            <input type="number" id="timer-input" min="0" value="60">
+            <button id="set-button" class="btn-secondary">Set</button>
+        </div>
+      </div>
+
+      <label>Speed Multiplier (x)</label>
+      <input type="number" id="tick-speed" min="0.1" value="1" step="0.1">
+
+      <div class="d-flex align-center mt-2">
+          <input type="checkbox" id="date-display-toggle">
+          <label for="date-display-toggle" class="ms-2 mb-0" style="cursor:pointer">Show Date</label>
+      </div>
+      
+      <div id="controls" class="mt-3 d-flex gap-2">
+         <button id="start-button" class="w-100">Start</button>
+         <button id="pause-button" class="w-100">Pause</button>
+         <button id="reset-button" class="w-100">Reset</button>
+      </div>
+    </div>
+
+    <!-- 2. Background -->
+    <div class="tab-content" id="background-tab">
+        <h3>Background</h3>
+        <label>Solid Color</label>
+        <div class="d-flex gap-2 mb-3">
+            <input type="color" id="bg-solid-color" value="#000000" class="w-100">
+            <button class="btn-secondary" data-apply="bg-solid">Apply</button>
+        </div>
+        
+        <label>Gradient (Deg, Start, End)</label>
+        <div class="d-flex gap-2 mb-2">
+            <input type="number" id="bg-gradient-degree" value="90" style="width: 50px">
+            <input type="color" id="bg-gradient-start" value="#000000" class="w-100">
+            <input type="color" id="bg-gradient-end" value="#1e1e24" class="w-100">
+        </div>
+        <button class="btn-secondary w-100 mb-3" data-apply="bg-gradient">Apply Gradient</button>
+
+        <label>Image URL</label>
+        <input type="text" id="bg-image-url" placeholder="https://...">
+        <label>Or Upload File</label>
+        <input type="file" id="bg-image-file" accept="image/*">
+        <button class="btn-secondary w-100 mt-2" data-apply="bg-image">Apply Image</button>
+    </div>
+
+    <!-- 3. Digits -->
+    <div class="tab-content" id="digits-tab">
+        <h3>Digits Style</h3>
+        <div class="settings-tabs nested-tabs mb-3">
+          <button class="tab-button nested active" data-tab="digits-global-tab">Global</button>
+          <button class="tab-button nested" data-tab="digits-hours-tab">Hr</button>
+          <button class="tab-button nested" data-tab="digits-minutes-tab">Min</button>
+          <button class="tab-button nested" data-tab="digits-seconds-tab">Sec</button>
+        </div>
+
+        <!-- Global Subtab -->
+        <div class="tab-content nested active" id="digits-global-tab">
+             <div class="digit-style-options" data-chunk="global">
+                 <label>Font Family</label>
+                 <select id="font-select">
+                     <option value="'Orbitron', sans-serif">Orbitron</option>
+                     <option value="'Roboto Mono', monospace">Roboto Mono</option>
+                     <option value="'Poppins', sans-serif">Poppins</option>
+                     <option value="custom">Custom Font...</option>
+                 </select>
+                 <input type="file" id="font-file" accept=".ttf,.woff,.woff2" style="display:none">
+                 <button id="apply-base-font-btn" class="btn-secondary w-100 mt-1">Apply Font</button>
+                 
+                 <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
+                 
+                 <label>Texture / Gradient</label>
+                 <div class="d-flex gap-2 mb-2">
+                     <input type="color" class="digit-solid-color" value="#ffffff" title="Solid Color">
+                     <input type="color" class="digit-gradient-start" value="#ffffff" title="Gradient Start">
+                     <input type="color" class="digit-gradient-end" value="#3b82f6" title="Gradient End">
+                 </div>
+                 <div class="d-flex gap-2 mb-2">
+                    <button class="apply-digit-style btn-secondary btn-small w-100" data-style="solid">Solid</button>
+                    <button class="apply-digit-style btn-secondary btn-small w-100" data-style="gradient">Gradient</button>
+                 </div>
+
+                 <label>Image Texture URL</label>
+                 <input type="text" class="digit-image-url-input" placeholder="https://...">
+                 <button class="apply-digit-style btn-secondary btn-small w-100 mt-1" data-style="image">Apply Texture</button>
+                 
+                 <button class="apply-digit-style btn-secondary btn-small w-100 mt-3" data-style="mask">Use Mask (Transparent)</button>
+             </div>
+        </div>
+        
+        <!-- Hours Subtab (Simplified for brevity, JS handles logic generically) -->
+        <div class="tab-content nested" id="digits-hours-tab">
+            <div class="digit-style-options" data-chunk="hours">
+                <button class="apply-digit-style btn-secondary w-100 mb-3" data-style="global">Reset to Global</button>
+                <label>Specific Color</label>
+                <input type="color" class="digit-solid-color w-100 mb-2" value="#ff0000">
+                <button class="apply-digit-style btn-secondary w-100" data-style="solid">Apply Color</button>
+            </div>
+        </div>
+        <!-- Minutes/Seconds subtabs would follow same pattern -->
+        <div class="tab-content nested" id="digits-minutes-tab"><div class="digit-style-options" data-chunk="minutes"><button class="apply-digit-style btn-secondary w-100 mb-2" data-style="global">Reset</button><input type="color" class="digit-solid-color w-100 mb-2"><button class="apply-digit-style btn-secondary w-100" data-style="solid">Apply</button></div></div>
+        <div class="tab-content nested" id="digits-seconds-tab"><div class="digit-style-options" data-chunk="seconds"><button class="apply-digit-style btn-secondary w-100 mb-2" data-style="global">Reset</button><input type="color" class="digit-solid-color w-100 mb-2"><button class="apply-digit-style btn-secondary w-100" data-style="solid">Apply</button></div></div>
+    </div>
+
+    <!-- 4. Layout -->
+    <div class="tab-content" id="layout-tab">
+        <h3>Layout</h3>
+        <label>Size (VW)</label>
+        <input type="range" id="clock-size" min="5" max="50" value="15">
+        
+        <label>Timezone Offset (Hours)</label>
+        <input type="number" id="timezone-offset" step="0.5" value="7">
+        
+        <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
+        
+        <button id="toggle-grid-btn" class="w-100 mb-2">Toggle Grid</button>
+        <button id="reset-positions-btn" class="w-100 btn-secondary mb-2">Reset Positions</button>
+        <button id="reload-nosave-btn" class="w-100 btn-danger">Reset All & Reload</button>
+    </div>
+
+    <!-- 5. Style -->
+    <div class="tab-content" id="style-tab">
+        <h3>Effects</h3>
+        <label>Opacity (BG / Digits)</label>
+        <div class="d-flex gap-2">
+            <input type="range" id="bg-opacity" max="1" step="0.1" value="1">
+            <input type="range" id="digits-opacity" max="1" step="0.1" value="1">
+        </div>
+        
+        <label>Blur (BG / Digits)</label>
+        <div class="d-flex gap-2">
+            <input type="range" id="bg-blur" max="20" value="0">
+            <input type="range" id="digits-blur" max="20" value="0">
+        </div>
+        
+        <div class="d-flex align-center mt-2">
+            <input type="checkbox" id="glow-toggle">
+            <label for="glow-toggle" class="ms-2 mb-0" style="cursor:pointer">Neon Glow</label>
+        </div>
+        <input type="color" id="glow-color" value="#ffffff" class="w-100 mt-2">
+    </div>
+
+    <!-- 6. Audio -->
+    <div class="tab-content" id="audio-tab">
+        <h3>Audio</h3>
+        <div class="d-flex align-center mb-2">
+            <input type="checkbox" id="sound-toggle">
+            <label for="sound-toggle" class="ms-2 mb-0">Enable Ticking</label>
+        </div>
+        <select id="sound-select">
+            <option value="none">None</option>
+            <option value="click">Click</option>
+            <option value="beep">Beep</option>
+        </select>
+        <label>Volume</label>
+        <input type="range" id="tick-volume-slider" max="1" step="0.1" value="0.7">
+    </div>
+    
+    <!-- 7. Shortcuts -->
+    <div class="tab-content" id="shortcuts-tab">
+        <h3>Shortcuts</h3>
+        <div class="shortcut-entry"><label>Start/Pause</label><input type="text" class="shortcut-input" data-action="toggleStartPause" readonly></div>
+        <div class="shortcut-entry"><label>Reset</label><input type="text" class="shortcut-input" data-action="resetTimerStopwatch" readonly></div>
+        <div class="shortcut-entry"><label>Layout</label><input type="text" class="shortcut-input" data-action="toggleLayout" readonly></div>
+        <div class="shortcut-entry"><label>Panel</label><input type="text" class="shortcut-input" data-action="closeSettings" readonly></div>
+    </div>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='js/clock.js') }}"></script>
+</body>
+</html>

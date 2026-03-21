@@ -1,0 +1,107 @@
+:root {
+    --glass-blur: 40px; 
+    --liquid-border: rgba(255, 255, 255, 0.15);
+}
+
+body { font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
+
+.bg-zoom { animation: slowZoom 40s linear infinite alternate; }
+@keyframes slowZoom { from { transform: scale(1.1); } to { transform: scale(1); } }
+
+.ambient-orb {
+    position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%;
+    filter: blur(100px); opacity: 0.12; pointer-events: none; mix-blend-mode: screen;
+    animation: pulse 12s infinite alternate ease-in-out;
+}
+@keyframes pulse { 0% { transform: translate(-5%, -5%) scale(1); } 100% { transform: translate(5%, 5%) scale(1.05); } }
+
+/* Liquid Card UI */
+.liquid-card {
+    position: relative;
+    background: linear-gradient(165deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+    border: 1px solid var(--liquid-border);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+.liquid-card::before {
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    filter: url(#lightWarp);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    mask-image: radial-gradient(circle at center, transparent 0%, transparent 20%, black 80%, black 100%);
+    -webkit-mask-image: radial-gradient(circle at center, transparent 0%, transparent 20%, black 80%, black 100%);
+}
+
+/* Button & Inputs */
+.liquid-input { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); transition: all 0.3s; }
+.liquid-input:focus { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.25); }
+
+.liquid-btn {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+}
+
+.liquid-btn:active { background: rgba(255, 255, 255, 0.1); transform: scale(0.96); }
+.liquid-btn::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transform: skewX(-25deg); transition: 0.75s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.liquid-btn:hover::after { left: 100%; }
+
+/* --- ROCKET ANIMATION --- */
+#rocket.launching {
+    animation: rocketLaunch 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes rocketLaunch {
+    0% { bottom: -100px; opacity: 1; transform: translateX(-50%) scale(1); }
+    30% { bottom: 20%; transform: translateX(-50%) scale(1.2); }
+    100% { bottom: 150vh; opacity: 1; transform: translateX(-50%) scale(0.5); }
+}
+
+/* --- SMOKE PARTICLES --- */
+.smoke-particle {
+    position: absolute;
+    background: radial-gradient(circle, white 0%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(20px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.smoke-fill {
+    animation: smokeAppear 2s ease-out forwards;
+}
+
+@keyframes smokeAppear {
+    0% { transform: scale(0); opacity: 0; }
+    40% { transform: scale(1.5); opacity: 1; }
+    100% { transform: scale(3); opacity: 1; }
+}
+
+.smoke-dissolve {
+    animation: smokeVanish 1.5s ease-in forwards;
+}
+
+@keyframes smokeVanish {
+    0% { transform: scale(3); opacity: 1; filter: blur(20px); }
+    100% { transform: scale(5) translate(100vw, 100vh); opacity: 0; filter: blur(100px); }
+}
+
+.smoke-dissolve:nth-child(even) { animation-name: smokeVanishAlt; }
+@keyframes smokeVanishAlt {
+    0% { transform: scale(3); opacity: 1; filter: blur(20px); }
+    100% { transform: scale(5) translate(-100vw, -100vh); opacity: 0; filter: blur(100px); }
+}
+
+/* Page States */
+.initial-load { opacity: 0; transform: scale(0.97) translateY(15px); filter: blur(8px); }
+.ready { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+.float-icon { animation: float 5s ease-in-out infinite; }
+@keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+
+#errorNotif.show { opacity: 1; transform: translate(-50%, 10px); pointer-events: auto; }
