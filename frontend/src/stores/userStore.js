@@ -48,6 +48,7 @@ export const useUserStore = defineStore('user', () => {
     const activeTheme = computed(() => user.value?.active_theme || 'dark')
     const unlockedThemes = computed(() => user.value?.unlocked_themes || ['dark', 'light'])
     const sideMenuLayout = computed(() => user.value?.side_menu_layout || 'list')
+    const isSingleClickOpen = computed(() => user.value?.is_single_click_open || false)
 
     return {
         user,
@@ -63,6 +64,7 @@ export const useUserStore = defineStore('user', () => {
         role,
         activeTheme,
         unlockedThemes,
-        sideMenuLayout
+        sideMenuLayout,
+        isSingleClickOpen
     }
 })

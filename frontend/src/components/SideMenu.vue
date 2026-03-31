@@ -104,8 +104,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { kpiBalance } from '@/utils/api.js'
 import { useUserStore } from '@/stores/userStore.js'
+
+const { t } = useI18n()
 
 const formatNumber = (num) => {
   if (num === undefined || num === null) return '0'
@@ -181,39 +184,39 @@ const logout = () => {
 }
 
 // Route Placeholders Mapping
-const userRoutes = [
-  { name: 'Drive', icon: 'fas fa-hdd', path: '/drive' },
-  { name: 'Collaboration', icon: 'fas fa-users-cog', path: '/collaboration' },
-  { name: 'Order Center', icon: 'fas fa-box', path: '/order-center' },
-  { name: 'G-code Generator', icon: 'fas fa-drafting-compass', path: '/gcode-generator' },
-  { name: 'Task Center', icon: 'fas fa-tasks', path: '#' },
-  { name: 'Email Hub', icon: 'fas fa-envelope-open-text', path: '/email-hub' },
-  { name: 'Convo Hub', icon: 'fas fa-comments', path: '/convo-hub' },
-  { name: 'Shop', icon: 'fas fa-shopping-cart', path: '/shop' },
-  { name: 'Arcade', icon: 'fas fa-gamepad', path: '/arcade' },
-  { name: 'Notification Center', icon: 'fas fa-bell', path: '#' },
-  { name: 'Personal Settings', icon: 'fas fa-user-cog', path: '/settings' },
-  { name: 'Personalize', icon: 'fas fa-paint-brush', path: '#' },
-  { name: 'Scan Virus', icon: 'fas fa-shield-virus', path: '/virus-scan' },
-  { name: 'Daily Gift', icon: 'fas fa-gift', path: '/daily-gifts' }
-]
+const userRoutes = computed(() => [
+  { name: t('sidebar.drive'), icon: 'fas fa-hdd', path: '/drive' },
+  { name: t('sidebar.collaboration'), icon: 'fas fa-users-cog', path: '/collaboration' },
+  { name: t('sidebar.order_center'), icon: 'fas fa-box', path: '/order-center' },
+  { name: t('sidebar.cnc'), icon: 'fas fa-drafting-compass', path: '/gcode-generator' },
+  { name: t('sidebar.task_center'), icon: 'fas fa-tasks', path: '#' },
+  { name: t('sidebar.email'), icon: 'fas fa-envelope-open-text', path: '/email-hub' },
+  { name: t('sidebar.chat'), icon: 'fas fa-comments', path: '/convo-hub' },
+  { name: t('sidebar.shop'), icon: 'fas fa-shopping-cart', path: '/shop' },
+  { name: t('sidebar.arcade'), icon: 'fas fa-gamepad', path: '/arcade' },
+  { name: t('sidebar.notification_center'), icon: 'fas fa-bell', path: '#' },
+  { name: t('sidebar.settings'), icon: 'fas fa-user-cog', path: '/settings' },
+  { name: t('sidebar.personalize'), icon: 'fas fa-paint-brush', path: '#' },
+  { name: t('sidebar.scan_virus'), icon: 'fas fa-shield-virus', path: '/virus-scan' },
+  { name: t('sidebar.daily_gift'), icon: 'fas fa-gift', path: '/daily-gifts' }
+])
 
-const adRoutes = [
-  { name: 'Manage Users', icon: 'fas fa-users', path: '/admin/users' },
-  { name: 'Server Performance', icon: 'fas fa-server', path: '/performance' },
-  { name: 'Panic Mode', icon: 'fas fa-exclamation-triangle', path: '#' }
-]
+const adRoutes = computed(() => [
+  { name: t('sidebar.users'), icon: 'fas fa-users', path: '/admin/users' },
+  { name: t('sidebar.performance'), icon: 'fas fa-server', path: '/performance' },
+  { name: t('sidebar.panic_mode'), icon: 'fas fa-exclamation-triangle', path: '/admin/panic' }
+])
 
-const opRoutes = [
-  { name: 'Manage Role', icon: 'fas fa-user-shield', path: '#' },
-  { name: 'Vault', icon: 'fas fa-piggy-bank', path: '#' },
-  { name: 'Manage Quotas', icon: 'fas fa-database', path: '#' },
-  { name: 'Nuke Data', icon: 'fas fa-bomb', path: '/nuke-data' },
-  { name: 'Manage Shop', icon: 'fas fa-store-alt', path: '#' },
-  { name: 'Working Mode', icon: 'fas fa-hammer', path: '#' },
-  { name: 'Manage Server Settings', icon: 'fas fa-cogs', path: '/operator/server-settings' },
-  { name: 'Manage Gifts', icon: 'fas fa-box-open', path: '/manage-gifts' },
-]
+const opRoutes = computed(() => [
+  { name: t('sidebar.manage_role'), icon: 'fas fa-user-shield', path: '#' },
+  { name: t('sidebar.vault'), icon: 'fas fa-shield-halved', path: '/vault' },
+  { name: t('sidebar.manage_quotas'), icon: 'fas fa-database', path: '#' },
+  { name: t('sidebar.nuke_data'), icon: 'fas fa-bomb', path: '/nuke-data' },
+  { name: t('sidebar.manage_shop'), icon: 'fas fa-store-alt', path: '#' },
+  { name: t('sidebar.working_mode'), icon: 'fas fa-bolt', path: '/operator/working-mode' },
+  { name: t('sidebar.admin_config'), icon: 'fas fa-cogs', path: '/operator/server-settings' },
+  { name: t('sidebar.manage_gifts'), icon: 'fas fa-box-open', path: '/manage-gifts' },
+])
 </script>
 
 <style scoped>
@@ -241,8 +244,7 @@ const opRoutes = [
 .menu-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.6);
   z-index: 998;
 }
 
@@ -258,9 +260,8 @@ const opRoutes = [
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 0 1rem 1rem 0;
   border-left: none;
-  background: var(--glass-bg-primary);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--bg-primary);
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
 }
 
 .side-menu.is-open {

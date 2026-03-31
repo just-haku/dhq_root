@@ -175,9 +175,12 @@ const update = () => {
     })
 
     // Player collision
-    if (Math.abs(e.x - player.x) < 20 && Math.abs(e.y - player.y) < 20) {
-       player.hp -= 0.5
-       if (player.hp <= 0) endGame()
+    if (Math.abs(e.x - player.x) < 30 && Math.abs(e.y - player.y) < 30) {
+       // Player is invincible during active attack frames
+       if (player.attacking <= 0) {
+         player.hp -= 0.5
+         if (player.hp <= 0) endGame()
+       }
     }
   })
   enemies = enemies.filter(e => !e.dead)
@@ -192,8 +195,9 @@ const update = () => {
 
 const checkAttack = () => {
   enemies.forEach(e => {
-    const attackX = player.dir === 1 ? player.x + player.w : player.x - 40
-    if (Math.abs(e.x - attackX) < 60 && Math.abs(e.y - player.y) < 50) {
+    // Extended slash hitbox
+    const attackX = player.dir === 1 ? player.x + (player.w * 0.8) : player.x - 80
+    if (Math.abs(e.x - attackX) < 100 && Math.abs(e.y - player.y) < 80) {
        e.hp -= 50
        if (e.hp <= 0) {
          e.dead = true

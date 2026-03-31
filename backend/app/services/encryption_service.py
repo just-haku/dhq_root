@@ -96,10 +96,10 @@ class EncryptionService:
                 # Use ffmpeg to extract thumbnail from first frame
                 (
                     ffmpeg
-                    .input(temp_input, ss='00:00:01')
-                    .output(temp_output, vframes=1, format='image2', vcodec='mjpeg')
+                    .input(temp_input, hwaccel='none')
+                    .output(temp_output, vframes=1, threads=1, format='image2', vcodec='mjpeg')
                     .overwrite_output()
-                    .run(capture_stdout=True, capture_stderr=True)
+                    .run(input=video_data, capture_stdout=True, capture_stderr=True)
                 )
                 
                 # Read the thumbnail

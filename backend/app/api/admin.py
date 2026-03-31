@@ -194,7 +194,40 @@ async def panic_button(current_user: User = Depends(get_op_user)):
     # Disable file links
     await redis_client.set("LINKS_DISABLED", "True", ex=86400)
     
-    return {"message": "Panic mode activated. All sessions invalidated."}
+    # Revoke all public "Anyone with link" shares to "Registered Users Only" natively
+    try:
+        from app.models.drive import DriveFile
+        
+        # 1. Update root access_level for files set to 'public'
+        public_files = DriveFile.objects(access_level='public')
+        for f in public_files:
+            f.access_level = 'internal'
+            f.save(validate=False)
+            
+        # 2. Update legacy is_public flags
+        legacy_files = DriveFile.objects(is_public=True)
+        for f in legacy_files:
+            f.is_public = False
+            f.save(validate=False)
+            
+        # 3. Update any specific DriveFileShare sub-documents
+        shared_docs = DriveFile.objects(shares__is_public=True)
+        for f in shared_docs:
+            modified = False
+            for share in f.shares:
+                if getattr(share, 'is_public', False):
+                    share.is_public = False
+                    modified = True
+                if getattr(share, 'access_level', '') == 'public':
+                    share.access_level = 'internal'
+                    modified = True
+            if modified:
+                f.save(validate=False)
+                
+    except Exception as e:
+        logger.error(f"Failed to bulk revoke public file shares during panic: {e}")
+    
+    return {"message": "Panic mode activated. All sessions invalidated and public files secured."}
 
 @router.post("/nuke-data")
 async def nuke_data_server(request: NukeDataRequest, current_user: User = Depends(get_op_user)):

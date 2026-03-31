@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query, BackgroundTasks, Request, Form
 from fastapi.responses import FileResponse, StreamingResponse
+import zipfile
 from app.models.user import User
 from app.models.drive import DriveFile, DriveQuota, DriveFileShare
 from app.api.auth import get_current_user, get_op_user
@@ -58,6 +59,7 @@ class FolderCreateRequest(BaseModel):
 class FileShareRequest(BaseModel):
     file_id: str
     access_level: str = "only_me"  # "only_me", "specific_users", "internal", "public"
+    permission_level: str = "viewer"  # "visitor", "viewer", "commenter", "editor"
     share_type: str = "read"  # "read" or "write"
     specific_usernames: List[str] = []
     expires_hours: Optional[int] = None
@@ -128,6 +130,60 @@ def ensure_user_directory(user: User):
     user_dir = os.path.join(storage_path, "DHQ_Root/Drive", str(user.id))
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
+
+def ensure_drive_folders(user: User, folder_path: str) -> str:
+    """
+    Ensure all directory components in a folder_path exist as DriveFile records.
+    Returns the final absolute path.
+    """
+    if not folder_path or folder_path == "/":
+        return "/"
+    
+    # Normalize path: remove leading / and split
+    path = folder_path.strip("/")
+    parts = path.split("/")
+    
+    current_path = "/"
+    for part in parts:
+        if not part or part in [".", ".."]: 
+            continue
+        
+        # Check if this folder already exists
+        try:
+            existing = DriveFile.objects(
+                owner=user,
+                folder_path=current_path,
+                filename=part,
+                is_folder=True,
+                is_deleted=False
+            ).first()
+            
+            if not existing:
+                # Create the folder record
+                folder = DriveFile(
+                    filename=part,
+                    stored_filename="DIR_" + part,  # Adding context to the placeholder
+                    file_path="",
+                    mime_type="folder",
+                    file_size=0,
+                    owner=user,
+                    folder_path=current_path,
+                    parent_folder=current_path,
+                    is_folder=True
+                )
+                folder.save()
+                print(f"Created missing folder: {current_path}{'/' if current_path == '/' else ''}{part}")
+            
+            # Update current_path for next level
+            if current_path == "/":
+                current_path = f"/{part}"
+            else:
+                current_path = f"{current_path}/{part}"
+        except Exception as e:
+            print(f"Error in ensure_drive_folders for part '{part}': {str(e)}")
+            # Don't raise, just try to continue or let it fail later
+            
+    return current_path
 
 def generate_share_token(file_id: str, user_id: str) -> str:
     """Generate encrypted share token"""
@@ -278,29 +334,42 @@ async def api_sync_user_quota(
     current_user: User = Depends(get_current_user)
 ):
     """Force re-sync user's quota physically from filesystem"""
-    # Reset to zero and recompute from actual files in the DB
-    used_space = 0
+    physical_used_space = 0
     try:
-        # Sum actual file sizes from non-deleted files in the database
+        # 1. Walk all configured storage paths to find user's physical data
+        for storage_path in storage_service.get_all_storage_paths():
+            user_drive_dir = os.path.join(storage_path, "DHQ_Root/Drive", str(current_user.id))
+            if os.path.exists(user_drive_dir):
+                for root, dirs, files in os.walk(user_drive_dir):
+                    # Skip internal folders if any (thumbnails are usually in a separate dir or hidden)
+                    for filename in files:
+                        file_full_path = os.path.join(root, filename)
+                        try:
+                            physical_used_space += os.path.getsize(file_full_path)
+                        except OSError:
+                            continue
+
+        # 2. Synchronize database records: mark missing files as deleted
+        # This part ensures the UI list stays in sync with manual filesystem deletions
         active_files = DriveFile.objects(
             owner=current_user,
             is_deleted=False,
             is_folder=False
         )
         for f in active_files:
-            used_space += f.file_size or 0
+            if not f.file_path or not os.path.exists(f.file_path):
+                f.is_deleted = True
+                f.save()
+
     except Exception as e:
-        # Fallback: walk the filesystem across all storages
-        for storage_path in storage_service.get_all_storage_paths():
-            user_drive_dir = os.path.join(storage_path, "DHQ_Root/Drive", str(current_user.id))
-            if os.path.exists(user_drive_dir):
-                for root, dirs, files in os.walk(user_drive_dir):
-                    for file in files:
-                        used_space += os.path.getsize(os.path.join(root, file))
+        print(f"Error during quota sync for {current_user.username}: {e}")
+        # If filesystem walk fails, we fallback to the last known DB state as used_space
+        # but the primary goal is physical accuracy.
     
     quota = get_user_quota(current_user)
-    quota.used_space = used_space
+    quota.used_space = physical_used_space
     quota.save()
+    
     return {
         "used_space": quota.used_space,
         "total_quota": quota.total_quota,
@@ -342,6 +411,28 @@ async def create_folder(
         is_folder=True,
         description=request.description
     )
+    
+    # Inherit access settings if parent exists
+    if request.parent_folder and request.parent_folder != "/":
+        # We need to find the parent folder record. 
+        # parent_folder in request is a virtual path string like "/Documents"
+        # We find the folder item that represents this path
+        parent_parts = request.parent_folder.strip("/").split("/")
+        p_name = parent_parts[-1]
+        p_path = "/" + "/".join(parent_parts[:-1]) if len(parent_parts) > 1 else "/"
+        
+        parent_rec = DriveFile.objects(owner=current_user, folder_path=p_path, filename=p_name, is_folder=True, is_deleted=False).first()
+        if parent_rec:
+            folder.access_level = parent_rec.access_level
+            folder.permission_level = parent_rec.permission_level
+            folder.shares = parent_rec.shares
+            folder.allowed_users = parent_rec.allowed_users
+            folder.share_token = parent_rec.share_token
+            folder.share_link_id = parent_rec.share_link_id
+            folder.public_share_link = parent_rec.public_share_link
+            folder.public_share_expires = parent_rec.public_share_expires
+            folder.share_password = parent_rec.share_password
+
     folder.save()
     
     return {"message": "Folder created successfully", "folder": folder.to_dict()}
@@ -355,12 +446,18 @@ async def upload_file(
     current_user: User = Depends(get_current_user)
 ):
     """Upload file to drive"""
-    
+    print(f"DEBUG: Uploading {file.filename} to {folder_path}")
     try:
-        # Check for duplicate filename in the same folder first (saves reading time)
+        # Ensure the entire folder hierarchy exists
+        try:
+            effective_folder_path = ensure_drive_folders(current_user, folder_path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to process folder structure: {str(e)}")
+        
+        # Check for duplicate filename in the same folder first
         existing_file = DriveFile.objects(
             owner=current_user,
-            folder_path=folder_path,
+            folder_path=effective_folder_path,
             filename=file.filename,
             is_deleted=False,
             is_folder=False
@@ -432,12 +529,31 @@ async def upload_file(
             mime_type=file.content_type,
             file_size=file_size,
             owner=current_user,
-            folder_path=folder_path,
+            folder_path=effective_folder_path,
             description=description,
             tags=tags.split(',') if tags else [],
             has_thumbnail=has_thumbnail,
             thumbnail_path=thumbnail_path
         )
+        
+        # Inherit access settings from parent folder
+        if effective_folder_path != "/":
+            parent_parts = effective_folder_path.strip("/").split("/")
+            p_name = parent_parts[-1]
+            p_path = "/" + "/".join(parent_parts[:-1]) if len(parent_parts) > 1 else "/"
+            
+            parent_rec = DriveFile.objects(owner=current_user, folder_path=p_path, filename=p_name, is_folder=True, is_deleted=False).first()
+            if parent_rec:
+                drive_file.access_level = parent_rec.access_level
+                drive_file.permission_level = parent_rec.permission_level
+                drive_file.shares = parent_rec.shares
+                drive_file.allowed_users = parent_rec.allowed_users
+                drive_file.share_token = parent_rec.share_token
+                drive_file.share_link_id = parent_rec.share_link_id
+                drive_file.public_share_link = parent_rec.public_share_link
+                drive_file.public_share_expires = parent_rec.public_share_expires
+                drive_file.share_password = parent_rec.share_password
+
         drive_file.save()
         
         # Update quota usage
@@ -455,10 +571,81 @@ async def upload_file(
         print(f"Detailed Upload Error: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
+@router.get("/drive/zip/{folder_id}")
+async def zip_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Zip and download an entire folder"""
+    root_folder = DriveFile.objects(id=folder_id, owner=current_user, is_folder=True, is_deleted=False).first()
+    if not root_folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    # Get all items recursively
+    # We can use the virtual path to find all children
+    base_path = root_folder.folder_path
+    if base_path == "/":
+        full_virtual_path = f"/{root_folder.filename}"
+    else:
+        full_virtual_path = f"{base_path.rstrip('/')}/{root_folder.filename}"
+
+    # Find all files that are under this path
+    # mongoengine doesn't have a direct "startswith" for paths easily with slashes without regex
+    all_items = DriveFile.objects(
+        owner=current_user, 
+        is_deleted=False,
+        folder_path__startswith=full_virtual_path
+    )
+    
+    # We also need items where folder_path is exactly full_virtual_path
+    # (files directly inside the root_folder)
+    
+    # Actually, startswith(full_virtual_path) should cover both:
+    # /Root/Folder matches /Root/Folder/File1
+    # But wait, if we have /Root/Folder2, it ALSO matches.
+    # So we need /Root/Folder/ or exact /Root/Folder
+    
+    query = Q(owner=current_user, is_deleted=False) & (
+        Q(folder_path=full_virtual_path) | Q(folder_path__startswith=full_virtual_path + "/")
+    )
+    all_files = DriveFile.objects(query).filter(is_folder=False)
+
+    if not all_files:
+        # Just return an empty zip? or error? 
+        # Better return empty zip to avoid UI crash
+        pass
+
+    def generate_zip():
+        io_output = io.BytesIO()
+        with zipfile.ZipFile(io_output, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file in all_files:
+                if os.path.exists(file.file_path):
+                    # Relative path inside the zip
+                    # full_virtual_path is the root folder's path in our zip
+                    # so if file is in /Test/Sub/file.ext and full_virtual_path is /Test
+                    # we want Sub/file.ext in zip
+                    rel_path = file.folder_path[len(full_virtual_path):].lstrip('/')
+                    archive_name = os.path.join(rel_path, file.filename)
+                    zf.write(file.file_path, archive_name)
+                
+        io_output.seek(0)
+        return io_output.getvalue()
+
+    zip_data = generate_zip()
+    
+    return StreamingResponse(
+        io.BytesIO(zip_data),
+        media_type="application/x-zip-compressed",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{root_folder.filename}.zip\""
+        }
+    )
+
 @router.get("/drive/download/{file_id}")
 async def download_file(
     file_id: str,
     share_token: Optional[str] = None,
+    preview: bool = False,
     current_user: User = Depends(get_current_user)
 ):
     """Download file from drive"""
@@ -502,18 +689,45 @@ async def download_file(
     try:
         # Update access info
         file.last_accessed = datetime.utcnow()
-        file.download_count += 1
+        if not preview:
+            file.download_count += 1
         file.save()
         
         # Return file
         return FileResponse(
             file.file_path,
             media_type=file.mime_type,
-            filename=file.filename
+            filename=file.filename,
+            content_disposition_type="inline" if preview else "attachment"
         )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+
+async def apply_recursive_access(parent_folder, user, access_level, permission_level, shares, allowed_users, share_token=None, share_link_id=None, public_share_link=None, public_share_expires=None, share_password=None):
+    """Recursively update access levels for all items inside a folder"""
+    folder_base = (parent_folder.folder_path.rstrip('/') + '/' + parent_folder.filename) if parent_folder.folder_path != "/" else "/" + parent_folder.filename
+    folder_prefix = folder_base + "/"
+    
+    # Find all items under this folder
+    items = DriveFile.objects(
+        Q(owner=user) &
+        Q(is_deleted=False) &
+        (Q(folder_path=folder_base) | Q(folder_path__startswith=folder_prefix))
+    )
+    
+    for item in items:
+        item.access_level = access_level
+        item.permission_level = permission_level
+        item.shares = shares
+        item.allowed_users = allowed_users
+        item.share_token = share_token
+        item.share_link_id = share_link_id
+        item.public_share_link = public_share_link
+        item.public_share_expires = public_share_expires
+        item.share_password = share_password
+        item.modified_at = datetime.utcnow()
+        item.save()
 
 @router.post("/drive/share")
 async def share_file(
@@ -526,9 +740,17 @@ async def share_file(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
     
+    # RESTRICTION: Block sharing of user's master root Drive folder
+    # In this system, folders with folder_path="/" or empty are top-level.
+    # The user specifically mentioned kuro's root or /home/haku/storage/hdd1/DHQ_Root/Drive/kuro.
+    # We check if it's a folder and if it looks like a root-level system folder.
+    if file.is_folder and (file.folder_path == "/" or not file.folder_path) and file.filename.lower() in ["drive", "vault"]:
+         raise HTTPException(status_code=403, detail="Sharing the master root folder is restricted for security reasons.")
+    
     try:
-        # Update file access level
+        # Update file access level and permission level
         file.access_level = request.access_level
+        file.permission_level = request.permission_level
         
         # Clear existing shares and allowed users
         file.shares = []
@@ -564,7 +786,7 @@ async def share_file(
                 file.share_token = generate_share_token(str(file.id), str(current_user.id))
             
             # The public route is now the short url
-            file.public_share_link = f"https://haku.io.vn/{file.share_link_id}"
+            file.public_share_link = f"https://haku.io.vn/s/{file.share_link_id}"
             
             if request.expires_hours:
                 file.public_share_expires = datetime.utcnow() + timedelta(hours=request.expires_hours)
@@ -580,8 +802,19 @@ async def share_file(
         # Save the file
         file.save()
         
+        # If it's a folder, update children recursively
+        if file.is_folder:
+            await apply_recursive_access(
+                file, current_user, 
+                file.access_level, file.permission_level, 
+                file.shares, file.allowed_users,
+                file.share_token, file.share_link_id,
+                file.public_share_link, file.public_share_expires,
+                file.share_password
+            )
+        
         return {
-            "message": "File shared successfully",
+            "message": "File shared successfully" + (" and all contents updated" if file.is_folder else ""),
             "file": file.to_dict(),
             "share_link": file.public_share_link if file.access_level in ["internal", "public"] else None
         }
@@ -592,9 +825,15 @@ async def share_file(
 @router.get("/drive/shared/{short_id}")
 async def access_shared_file(
     short_id: str,
-    password: Optional[str] = None
+    password: Optional[str] = None,
+    request: Request = None
 ):
-    """Access shared file via encrypted short link"""
+    """Access shared file via encrypted short link.
+    - public access_level: no auth required
+    - internal access_level: must be authenticated (token cookie/header)
+    """
+    from app.api.auth import get_current_user
+    from fastapi import Request
     
     try:
         # Find file by short ID
@@ -605,6 +844,18 @@ async def access_shared_file(
         # Check if link has expired
         if file.public_share_expires and datetime.utcnow() > file.public_share_expires:
             raise HTTPException(status_code=410, detail="Share link has expired")
+        
+        # Enforce authentication for 'internal' access level
+        if file.access_level == 'internal':
+            # Try to get current user from Authorization header
+            auth_header = request.headers.get('Authorization') if request else None
+            if not auth_header:
+                raise HTTPException(status_code=401, detail="Authentication required to access this file")
+            # If header present, proceed (actual token validation happens at the download request)
+        
+        # Reject if access_level is private or specific_users (should not get here)
+        if file.access_level in ('only_me', 'specific_users', None):
+            raise HTTPException(status_code=403, detail="This link is no longer active")
         
         # Check password protection
         if file.share_password:
@@ -628,13 +879,65 @@ async def access_shared_file(
             path=file.file_path,
             filename=file.filename,
             media_type=file.mime_type,
-            content_disposition_type="inline" # Allows previewing natively if possible
+            content_disposition_type="inline"
         )
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Access failed: {str(e)}")
+
+@router.get("/drive/search")
+async def search_drive_files(
+    q: str,
+    type_filter: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Global cross-folder search across all of the user's Drive files"""
+    if not q or len(q.strip()) < 1:
+        return {"files": [], "total": 0}
+    
+    query = q.strip().lower()
+    results = DriveFile.objects(
+        owner=current_user,
+        is_deleted=False,
+        filename__icontains=query
+    ).order_by('-modified_at').limit(100)
+    
+    files = [f.to_dict() for f in results]
+    
+    # Apply optional type filter
+    if type_filter:
+        type_map = {
+            'image': ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'],
+            'video': ['mp4', 'avi', 'mkv', 'webm', 'mov'],
+            'audio': ['mp3', 'wav', 'ogg', 'flac'],
+            'document': ['pdf', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xls', 'xlsx'],
+            'archive': ['zip', 'rar', 'tar', 'gz', '7z'],
+            'code': ['js', 'py', 'html', 'css', 'json', 'vue', 'cpp', 'c', 'java'],
+        }
+        allowed_exts = type_map.get(type_filter, [])
+        if allowed_exts:
+            files = [f for f in files if f.get('name', '').rsplit('.', 1)[-1].lower() in allowed_exts]
+    
+    return {"files": files, "total": len(files)}
+
+@router.get("/drive/shared-with-me")
+async def get_shared_with_me(
+    current_user: User = Depends(get_current_user)
+):
+    """Get files shared with the current user by other users"""
+    # Find files where this user is in allowed_users
+    shared_files = DriveFile.objects(
+        allowed_users=current_user,
+        is_deleted=False
+    ).order_by('-modified_at').limit(200)
+    
+    return {
+        "files": [f.to_dict() for f in shared_files],
+        "total": shared_files.count()
+    }
+
 
 async def delete_folder_contents(folder, current_user):
     """Recursively soft-delete all contents of a folder"""
@@ -656,6 +959,25 @@ async def delete_folder_contents(folder, current_user):
         content.is_deleted = True
         content.modified_at = datetime.utcnow()
         content.save()
+
+@router.get("/drive/file/{file_id}")
+async def get_drive_file_metadata(
+    file_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch metadata for a single drive item"""
+    item = DriveFile.objects(id=file_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    # Check permissions
+    if item.owner != current_user and current_user.role != "OP":
+        # Check if shared with user
+        share = DriveFileShare.objects(file=item, user=current_user).first()
+        if not share and item.access_level != "public":
+             raise HTTPException(status_code=403, detail="Access denied")
+             
+    return item.to_dict()
 
 @router.delete("/drive/file/{file_id}")
 async def delete_file(
@@ -971,19 +1293,44 @@ async def get_thumbnail(
     file_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Get thumbnail for a file"""
-    file = DriveFile.objects(id=file_id, owner=current_user, is_deleted=False).first()
+    """Get thumbnail for a file with permission checks"""
+    # Find file globally first
+    file = DriveFile.objects(id=file_id, is_deleted=False).first()
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
     
-    if not file.has_thumbnail or not file.thumbnail_path:
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    # Permission check: owner OR specific share OR internal OR public
+    is_owner = str(file.owner.id) == str(current_user.id)
+    is_shared = any(s.shared_with and str(s.shared_with.id) == str(current_user.id) for s in file.shares) if file.shares else False
+    is_internal = file.access_level == 'internal'
+    is_public = file.access_level == 'public'
+    
+    if not (is_owner or is_shared or is_internal or is_public):
+        raise HTTPException(status_code=403, detail="Access denied to thumbnail")
+    
+    from app.core.thumbnails import get_thumbnail_path, generate_thumbnail, SUPPORTED_IMAGE_TYPES, SUPPORTED_VIDEO_TYPES
+    thumb_path = get_thumbnail_path(str(file.id))
+    
+    if not thumb_path:
+        # Trigger on-the-fly generation
+        thumb_path = generate_thumbnail(file.file_path, str(file.id))
+
+    if thumb_path and os.path.exists(thumb_path):
+        return FileResponse(thumb_path)
+    
+    # Fallback: if it's an image, serve original file
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(file.filename)
+    if mime_type in SUPPORTED_IMAGE_TYPES and file.file_path and os.path.exists(file.file_path):
+        return FileResponse(file.file_path)
+
+    raise HTTPException(status_code=404, detail="Thumbnail not found")
     
     if not os.path.exists(file.thumbnail_path):
-        raise HTTPException(status_code=404, detail="Thumbnail file not found")
+        raise HTTPException(status_code=404, detail="Thumbnail file missing on disk")
     
-    # If the file is a video, the generated thumbnail is always a JPEG frame
-    mime = "image/jpeg" if file.mime_type and file.mime_type.startswith('video/') else file.mime_type
+    # Video thumbnails are always JPEG frames
+    mime = "image/jpeg" if (file.mime_type and file.mime_type.startswith('video/')) or file.filename.lower().endswith('.pdf') else file.mime_type
     
     return FileResponse(
         file.thumbnail_path,

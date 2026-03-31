@@ -159,6 +159,7 @@ export function apiRequest(endpoint, options = {}) {
   const url = baseUrl ? `${baseUrl}${endpoint}` : `/api${endpoint}`
   const headers = {
     'Content-Type': 'application/json',
+    'Accept-Language': localStorage.getItem('dhq-locale') || 'en',
     ...getAuthHeaders(),
     ...options.headers
   }
@@ -275,6 +276,7 @@ export function apiPostForm(endpoint, formData) {
   return fetch(url, {
     method: 'POST',
     headers: {
+      'Accept-Language': localStorage.getItem('dhq-locale') || 'en',
       ...getAuthHeaders()
     },
     body: formData
@@ -312,6 +314,7 @@ export function apiUpload(endpoint, formData, onProgress = null) {
     if (authHeaders.Authorization) {
       xhr.setRequestHeader('Authorization', authHeaders.Authorization)
     }
+    xhr.setRequestHeader('Accept-Language', localStorage.getItem('dhq-locale') || 'en')
 
     // Attach progress listener if provided
     if (onProgress) {

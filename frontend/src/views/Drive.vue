@@ -3,14 +3,38 @@
     <!-- Left Sidebar: Navigation & Actions -->
     <aside class="nautilus-sidebar glass-panel">
       <div class="sidebar-header">
-        <button 
-          class="btn-primary create-btn" 
-          @click="uploadFiles" 
-          :disabled="currentFilter !== null"
-          :style="{ opacity: currentFilter !== null ? '0.5' : '1', cursor: currentFilter !== null ? 'not-allowed' : 'pointer' }"
-        >
-          <i class="fas fa-plus"></i> New / Upload
-        </button>
+        <div class="sidebar-creation-group">
+          <!-- New Folder Button -->
+          <button 
+            class="btn-primary create-btn" 
+            @click="createFolder" 
+            :disabled="currentFilter !== null"
+            :style="{ opacity: currentFilter !== null ? '0.5' : '1', cursor: currentFilter !== null ? 'not-allowed' : 'pointer' }"
+          >
+            <i class="fas fa-folder-plus"></i> New Folder
+          </button>
+
+          <!-- Upload Dropdown -->
+          <div class="dropdown-wrapper">
+             <button 
+               class="btn-secondary create-btn upload-dropdown-btn" 
+               @click="showDropdown.upload = !showDropdown.upload"
+               :disabled="currentFilter !== null"
+               :style="{ opacity: currentFilter !== null ? '0.5' : '1', cursor: currentFilter !== null ? 'not-allowed' : 'pointer' }"
+             >
+               <i class="fas fa-cloud-upload-alt"></i> Upload <i class="fas fa-chevron-down" style="font-size: 0.7rem; margin-left: auto;"></i>
+             </button>
+             
+             <div v-if="showDropdown.upload" class="dropdown-menu glass-panel">
+                <div class="dropdown-item" @click="uploadFiles(); showDropdown.upload = false">
+                  <i class="fas fa-file-upload"></i> Upload Files
+                </div>
+                <div class="dropdown-item" @click="uploadFolder(); showDropdown.upload = false">
+                  <i class="fas fa-folder-open"></i> Upload Folder
+                </div>
+             </div>
+          </div>
+        </div>
       </div>
       
       <div class="sidebar-quota">
@@ -140,7 +164,6 @@
           </div>
         </div>
       </header>
-
       <!-- Drive Content Array -->
       <div 
         class="nautilus-content" 
@@ -159,13 +182,14 @@
             :class="{ selected: selectedFiles.includes(item.id) }"
             :data-file-id="item.id"
             draggable="true"
-            @click.stop.prevent="selectFile(item, $event.ctrlKey || $event.metaKey)"
-            @dblclick="openFile(item)"
+            @click.stop.prevent="handleItemClick(item, $event)"
+            @dblclick="handleItemDoubleClick(item)"
             @contextmenu.stop.prevent="showItemContextMenu($event, item)"
             @dragstart="startItemDrag($event, item)"
           >
             <div class="item-icon-wrapper relative">
-               <template v-if="['image', 'video'].includes(getFileTypeDetails(item.name).group) && !item.thumbnailError">
+               <!-- FIXED: Added pdf group here -->
+               <template v-if="['image', 'video', 'pdf'].includes(getFileTypeDetails(item.name).group) && !item.thumbnailError">
                  <img :src="getThumbnailUrl(item)" class="file-thumbnail-grid" @error="item.thumbnailError = true" />
                </template>
                <template v-else>
@@ -206,14 +230,14 @@
               :class="{ selected: selectedFiles.includes(item.id) }"
               :data-file-id="item.id"
               draggable="true"
-              @click.stop.prevent="selectFile(item, $event.ctrlKey || $event.metaKey)"
-              @dblclick="openFile(item)"
+              @click.stop.prevent="handleItemClick(item, $event)"
+              @dblclick="handleItemDoubleClick(item)"
               @contextmenu.stop.prevent="showItemContextMenu($event, item)"
               @dragstart="startItemDrag($event, item)"
             >
               <div class="col-name">
                 <div class="relative inline-block icon-container">
-                  <template v-if="['image', 'video'].includes(getFileTypeDetails(item.name).group) && !item.thumbnailError">
+                  <template v-if="['image', 'video', 'pdf'].includes(getFileTypeDetails(item.name).group) && !item.thumbnailError">
                     <img :src="getThumbnailUrl(item)" class="file-thumbnail-list" @error="item.thumbnailError = true" />
                   </template>
                   <template v-else>
@@ -242,12 +266,11 @@
         </div>
       </div>
     </main>
-
     <!-- Right Side Sidebar: Properties/Details Pane -->
-    <aside class="nautilus-details glass-panel" v-if="infoModal.visible && selectedItemDetails" v-click-outside="closeInfoModal">
+    <aside class="nautilus-details glass-panel shadow-2xl" v-if="infoModal.visible && selectedItemDetails" v-click-outside="closeInfoModal" style="z-index: 1001;">
       <div class="details-header">
         <div class="preview-box flex items-center justify-center relative">
-            <template v-if="['image', 'video'].includes(getFileTypeDetails(selectedItemDetails.name).group) && !selectedItemDetails.thumbnailError">
+            <template v-if="['image', 'video', 'pdf'].includes(getFileTypeDetails(selectedItemDetails.name || selectedItemDetails.filename).group) && !selectedItemDetails.thumbnailError">
               <img :src="getThumbnailUrl(selectedItemDetails)" class="file-thumbnail-preview" @error="selectedItemDetails.thumbnailError = true" />
             </template>
             <template v-else>
@@ -289,6 +312,9 @@
       
       <!-- Contextual actions -->
       <div class="details-actions">
+         <button class="btn-action" v-if="selectedItemDetails.type === 'file'" @click="openFile(selectedItemDetails)">
+           <i class="fas fa-eye"></i> View
+         </button>
          <button class="btn-action" v-if="selectedItemDetails.type === 'file'" @click="downloadFile(selectedItemDetails)">
            <i class="fas fa-download"></i> Download
          </button>
@@ -351,17 +377,26 @@
             <div class="menu-item" @click="renameSelection">
               <i class="fas fa-edit"></i> Rename
             </div>
+            <div v-if="contextMenu.item && contextMenu.item.type === 'folder'" class="menu-item" @click="downloadFolderZip(contextMenu.item)">
+            <i class="fas fa-file-archive"></i> Download as Zip
+          </div>
             <div class="menu-item" @click="toggleStar(contextMenu.item)">
               <i :class="['fas', contextMenu.item.is_starred ? 'fa-star-o' : 'fa-star']"></i> {{ contextMenu.item.is_starred ? 'Unstar' : 'Star' }}
             </div>
             <div class="menu-item" @click="shareItem">
               <i class="fas fa-share-alt"></i> Share
             </div>
-            <div class="menu-item" @click="showInfo">
-              <i class="fas fa-info-circle"></i> Properties
+            <div class="menu-item" @click="showItemProperties(contextMenu.item)">
+        <i class="fas fa-info-circle"></i> Properties
+      </div>
+            <div class="menu-item" v-if="contextMenu.item.type === 'file'" @click="openFile(contextMenu.item)">
+               <i class="fas fa-eye"></i> View
             </div>
             <div class="menu-item" v-if="contextMenu.item.type === 'file'" @click="downloadSelectedItem">
               <i class="fas fa-download"></i> Download
+            </div>
+            <div class="menu-item" v-if="contextMenu.item.is_folder" @click="downloadFolderZip(contextMenu.item)">
+               <i class="fas fa-file-archive"></i> Download Folder (.zip)
             </div>
             <div class="menu-separator"></div>
             <div class="menu-item danger" @click="deleteSelection">
@@ -389,51 +424,68 @@
 
     <!-- Modals remain mostly identical logically -->
     <!-- Upload Modal -->
-    <div v-if="uploadModal.visible" class="modal-overlay" @click.self="closeUploadModal">
+    <div v-show="uploadModal.visible" class="modal-overlay" @click.self="closeUploadModal">
       <div class="modal-content upload-modal">
         <div class="modal-header">
-          <h2>Upload Files</h2>
+          <div class="modal-title-with-summary">
+            <h2>Upload Files</h2>
+            <span v-if="uploadTotalCount > 0" class="upload-summary-badge">
+              {{ uploadTotalCount }} files ({{ formatSize(uploadTotalSize) }})
+            </span>
+          </div>
           <button class="close-btn" @click="closeUploadModal">
             <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="modal-body">
-          <div 
+          <input 
+            type="file" 
+            id="driveFileInput"
+            ref="fileInput" 
+            multiple 
+            accept="*/*"
+            class="hidden-input"
+            @change="handleFileSelect"
+          >
+          <input 
+            type="file" 
+            id="driveFolderInput"
+            ref="folderInput" 
+            webkitdirectory 
+            directory
+            multiple 
+            class="hidden-input"
+            @change="handleFileSelect"
+          >
+          <label 
+            for="driveFileInput"
             class="upload-area"
             :class="{ 'drag-over': uploadModal.dragOver }"
             @dragover.prevent="uploadModal.dragOver = true"
             @dragleave.prevent="uploadModal.dragOver = false"
-            @drop="handleDrop"
-            @click="$refs.fileInput.click()"
+            @drop.prevent="handleDrop"
           >
             <i class="fas fa-cloud-upload-alt upload-icon"></i>
-            <p>Drag and drop files here or click to browse</p>
-            <input 
-              type="file" 
-              ref="fileInput" 
-              multiple 
-              class="hidden-input"
-              @change="handleFileSelect"
-            >
-          </div>
-          <div v-if="uploadModal.files.length > 0" class="upload-list-area">
-            <h4>Selected Files</h4>
-            <div v-for="(file, index) in uploadModal.files" :key="index" class="upload-item" :class="file.status">
-              <i :class="['fas', getFileIcon(file.name)]"></i>
-              <span class="file-name">{{ file.name }}</span>
-              <span class="file-size">{{ formatSize(file.size || 0) }}</span>
-              <!-- Status badge -->
-              <span v-if="file.status === 'duplicate'" class="upload-status-badge duplicate" title="A file with this name already exists in this folder">
-                <i class="fas fa-exclamation-triangle"></i> Duplicate
-              </span>
-              <span v-else-if="file.status === 'error'" class="upload-status-badge error">
-                <i class="fas fa-times-circle"></i> Failed
-              </span>
-              <span v-else-if="file.status === 'done'" class="upload-status-badge done">
-                <i class="fas fa-check-circle"></i> Done
-              </span>
-              <div v-if="file.status === 'uploading' && file.progress > 0" class="upload-progress-bar">
-                <div class="upload-progress-fill" :style="{ width: file.progress + '%' }"></div>
+            <p>Drag and drop files/folders here or click to browse</p>
+          </label>
+          <div v-if="uploadModal.files.length > 0" class="upload-list-area scrollable-list">
+            <h4>Selected Files ({{ uploadModal.files.length }})</h4>
+            <div class="list-container">
+              <div v-for="(file, index) in uploadModal.files" :key="index" class="upload-item" :class="file.status">
+                <div class="file-main-info">
+                  <i :class="['fas', getFileIcon(file.name)]"></i>
+                  <span class="file-name" :title="file.name">{{ file.name }}</span>
+                </div>
+                <div class="file-meta-info">
+                  <span class="file-size">{{ formatSize(file.size || 0) }}</span>
+                  <button class="remove-file-btn" @click="removeFileFromUpload(index)" v-if="!uploadStatus.active">
+                    <i class="fas fa-times"></i>
+                  </button>
+                  <!-- Status badge -->
+                  <span v-if="file.status === 'duplicate'" class="upload-status-badge duplicate">
+                    DUP
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -453,12 +505,15 @@
     </div>
 
     <!-- Media Preview Modal -->
-    <div v-if="mediaPreviewModal.visible" class="modal-overlay media-overlay" @click.self="closeMediaPreview">
-      <div class="modal-content media-modal glass-panel">
+    <div v-if="mediaPreviewModal.visible" class="modal-overlay" @click.self="closeMediaPreview" style="z-index: 1005;">
+      <div class="modal-content glass-panel media-preview-modal" :class="{ 'document-preview-modal': mediaPreviewModal.type === 'document' }">
         <div class="modal-header">
-          <h2 class="text-truncate" style="max-width: 70%;" :title="mediaPreviewModal.item?.name">{{ mediaPreviewModal.item?.name }}</h2>
-          <div class="modal-actions" style="display: flex; gap: 1rem; align-items: center;">
-            <a :href="mediaUrl(mediaPreviewModal.item)" target="_blank" class="icon-btn" title="Open in New Tab" style="color: var(--text-primary);">
+          <div class="modal-title-with-summary">
+            <h2>{{ mediaPreviewModal.item?.name }}</h2>
+            <span class="upload-summary-badge">{{ formatSize(mediaPreviewModal.item?.size) }}</span>
+          </div>
+          <div class="header-tools">
+            <a :href="mediaUrl(mediaPreviewModal.item)" target="_blank" class="tool-btn" title="Open in New Tab">
               <i class="fas fa-external-link-alt"></i>
             </a>
             <button class="close-btn" @click="closeMediaPreview">
@@ -466,9 +521,8 @@
             </button>
           </div>
         </div>
-        
-        <div class="modal-body media-body" ref="mediaBodyRef" 
-             @wheel.prevent="handleMediaZoom" 
+        <div class="modal-body media-preview-body" ref="mediaBodyRef" 
+             @wheel="handleMediaZoom" 
              @mousedown="startMediaPan" 
              @mousemove="panMedia" 
              @mouseup="endMediaPan" 
@@ -499,7 +553,7 @@
                  
           <!-- Document / Fallback iframe -->
           <iframe v-else-if="mediaPreviewModal.type === 'document'" 
-                  :src="mediaUrl(mediaPreviewModal.item)" 
+                  :src="mediaUrl(mediaPreviewModal.item, true)" 
                   class="media-preview-content"
                   style="width: 100%; height: 100%; border: none; background: #fff;"></iframe>
                   
@@ -514,10 +568,10 @@
     </div>
 
     <!-- Share Modal -->
-    <div v-if="shareModal.visible" class="modal-overlay" @click.self="closeShareModal">
-      <div class="modal-content">
+    <div v-if="shareModal.visible" class="modal-overlay" @click.self="closeShareModal" style="z-index: 1002;">
+      <div class="modal-content glass-panel share-modal-box">
         <div class="modal-header">
-          <h2>Share "{{ shareModal.item?.name }}"</h2>
+          <h2>Share "{{ shareModal.item?.name || shareModal.item?.filename }}"</h2>
           <button class="close-btn" @click="closeShareModal">
             <i class="fas fa-times"></i>
           </button>
@@ -530,6 +584,19 @@
               <option value="account">Specific Account</option>
               <option value="link">Anyone with link</option>
             </select>
+          </div>
+          
+          <div class="form-group" v-if="shareModal.accessLevel !== 'private'">
+            <label>Permission Level</label>
+            <select class="form-select" v-model="shareModal.permissionLevel">
+              <option value="visitor">Visitor (View Only, NO Download)</option>
+              <option value="viewer">Viewer (View & Download)</option>
+              <option value="commenter">Commenter (View, Download & Comment)</option>
+              <option value="editor">Editor (Full Access)</option>
+            </select>
+            <p class="text-xs text-secondary mt-1" v-if="shareModal.permissionLevel === 'visitor'">
+              <i class="fas fa-shield-alt"></i> Anti-screenshot & download protection enabled.
+            </p>
           </div>
           
           <div class="form-group" v-if="shareModal.accessLevel === 'account'">
@@ -545,14 +612,6 @@
             <span class="toggle-description">Encrypt with password</span>
           </div>
 
-          <div class="toggle-group" v-if="shareModal.accessLevel === 'link'">
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="shareModal.shortLink">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="toggle-description">Generate short link</span>
-          </div>
-
           <div class="link-display" v-if="shareModal.generatedLink">
             <input type="text" readonly :value="shareModal.generatedLink" class="form-control">
             <button class="btn-secondary" @click="copyLink">
@@ -566,10 +625,9 @@
         </div>
       </div>
     </div>
-
     <!-- Properties/Info Modal (Legacy Fallback) -->
     <div v-if="infoModal.visible" class="modal-overlay" @click.self="closeInfoModal">
-      <div class="modal-content">
+      <div class="modal-content glass-panel">
          <div class="modal-header">
            <h2>Properties</h2>
            <button class="close-btn" @click="closeInfoModal"><i class="fas fa-times"></i></button>
@@ -613,17 +671,105 @@
           </div>
         </div>
       </transition>
+    <!-- Global Upload Progress Panel -->
+    <div v-if="uploadStatus.active" class="global-upload-progress glass-panel" :class="{ 'minimized': uploadStatus.minimized }">
+      <div class="progress-header" @click="uploadStatus.expanded = !uploadStatus.expanded">
+        <div class="header-info">
+          <i class="fas fa-cloud-upload-alt mr-2"></i>
+          <span>{{ uploadStatus.files.filter(f => f.status === 'done').length }} / {{ uploadStatus.files.length }} uploaded</span>
+        </div>
+        <div class="header-actions">
+          <button @click.stop="uploadStatus.minimized = !uploadStatus.minimized" class="icon-btn">
+            <i :class="['fas', uploadStatus.minimized ? 'fa-window-maximize' : 'fa-minus']"></i>
+          </button>
+          <button v-if="uploadStatus.files.every(f => f.status !== 'uploading')" @click.stop="clearCompletedUploads" class="icon-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      
+      <div v-if="!uploadStatus.minimized && uploadStatus.expanded" class="progress-body">
+        <div v-for="(file, index) in uploadStatus.files" :key="index" class="progress-item">
+          <div class="item-info">
+            <i :class="['fas', file.icon]"></i>
+            <span class="item-name" :title="file.name">{{ file.name }}</span>
+            <span class="item-status">
+               <i v-if="file.status === 'done'" class="fas fa-check-circle text-success"></i>
+               <i v-else-if="file.status === 'error'" class="fas fa-exclamation-circle text-danger"></i>
+               <span v-else>{{ file.progress }}%</span>
+            </span>
+          </div>
+          <div class="item-bar-container">
+            <div class="item-bar" :style="{ width: file.progress + '%', background: file.status === 'error' ? '#ef4444' : 'var(--accent-primary)' }"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Properties Modal (Hover Window) -->
+    <div v-if="propertyModal.visible" class="modal-overlay" @click.self="propertyModal.visible = false" style="z-index: 1006;">
+      <div class="modal-content glass-panel property-modal-box">
+        <div class="modal-header">
+          <h2><i class="fas fa-info-circle text-gold mr-2"></i> Properties</h2>
+          <button class="close-btn" @click="propertyModal.visible = false">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body properties-grid">
+          <div class="detail-row">
+            <span class="label">Name</span>
+            <span class="value">{{ propertyModal.item?.name }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Type</span>
+            <span class="value capitalize">{{ propertyModal.item?.is_folder ? 'Folder' : (propertyModal.item?.mime_type || 'File') }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Size</span>
+            <span class="value">{{ formatSize(propertyModal.item?.size) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Location</span>
+            <span class="value">{{ propertyModal.item?.folder_path }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Access</span>
+            <span class="value capitalize">
+              <i :class="getAccessIcon(propertyModal.item?.access_level)" class="mr-1"></i>
+              {{ formatAccessLevel(propertyModal.item?.access_level) }}
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Created</span>
+            <span class="value">{{ formatDate(propertyModal.item?.created_at) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Modified</span>
+            <span class="value">{{ formatDate(propertyModal.item?.modified_at) }}</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-primary" @click="propertyModal.visible = false">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
-</template>\n\n<script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { showSuccess, showError, showConfirm } from '@/utils/notification'
 import { apiGet, apiPost, apiUpload, apiDelete } from '@/utils/api'
+import { useSystemStore } from '@/stores/systemStore'
+import { useUserStore } from '@/stores/userStore'
+
+const systemStore = useSystemStore()
+const userStore = useUserStore()
 
 // Reactive state
 const viewMode = ref('grid')
 const selectedFiles = ref([])
 const currentPath = ref('/')
-const currentFilter = ref(null) // State holding the left-sidebar active toggle state
+const currentFilter = ref(null) 
 const showFilters = ref(false)
 const searchQuery = ref('')
 const searchFilters = reactive({
@@ -631,6 +777,13 @@ const searchFilters = reactive({
   size: '',
   date: ''
 })
+
+const hasActiveFilters = computed(() => {
+  return searchQuery.value !== '' || 
+         searchFilters.type !== '' || 
+         searchFilters.size !== '' || 
+         searchFilters.date !== '';
+});
 
 const promptModal = reactive({
   visible: false,
@@ -640,6 +793,39 @@ const promptModal = reactive({
   placeholder: '',
   resolve: null
 })
+
+const propertyModal = reactive({
+  visible: false,
+  item: null
+})
+
+const showItemProperties = (item) => {
+  propertyModal.item = item
+  propertyModal.visible = true
+}
+
+const getAccessIcon = (level) => {
+  if (level === 'public') return 'fas fa-globe'
+  if (level === 'internal') return 'fas fa-users'
+  if (level === 'specific_users') return 'fas fa-user-friends'
+  return 'fas fa-lock'
+}
+
+const formatAccessLevel = (level) => {
+  if (level === 'public') return 'Anyone with link'
+  if (level === 'internal') return 'Account only'
+  if (level === 'specific_users') return 'Shared users'
+  return 'Private'
+}
+
+const fileInput = ref(null)
+const folderInput = ref(null)
+
+const uploadFolder = () => {
+  if (folderInput.value) {
+    folderInput.value.click()
+  }
+}
 
 const showPrompt = (title, label, defaultValue = '', placeholder = '') => {
   return new Promise((resolve) => {
@@ -662,9 +848,11 @@ const cancelPrompt = () => {
   promptModal.visible = false
 }
 
-const hasActiveFilters = computed(() => {
-  return searchFilters.type !== '' || searchFilters.size !== '' || searchFilters.date !== ''
-})
+const uploadTotalCount = computed(() => uploadModal.files ? uploadModal.files.length : 0);
+const uploadTotalSize = computed(() => {
+    if (!uploadModal.files) return 0;
+    return uploadModal.files.reduce((acc, f) => acc + (f.size || 0), 0);
+});
 
 const clearFilters = () => {
   searchFilters.type = ''
@@ -689,6 +877,20 @@ const contextMenu = reactive({
 })
 
 // Upload modal
+const showDropdown = ref({
+  upload: false,
+  create: false
+})
+
+const uploadStatus = reactive({
+  active: false,
+  minimized: false,
+  expanded: true,
+  files: [], // { name, size, progress, status, icon }
+  successCount: 0,
+  errorCount: 0
+})
+
 const uploadModal = reactive({
   visible: false,
   dragOver: false,
@@ -700,10 +902,26 @@ const shareModal = reactive({
   visible: false,
   item: null,
   accessLevel: 'private',
-  targetUser: '',
-  encrypted: false,
-  shortLink: false,
-  generatedLink: ''
+  permissionLevel: 'viewer',
+  usernames: [],
+  password: '',
+  expiresHours: null,
+  loading: false
+})
+
+// Watch for access level changes to show warning for folders
+watch(() => shareModal.accessLevel, async (newVal) => {
+  if (newVal === 'public' && shareModal.item?.is_folder) {
+    const confirm = await showConfirm(
+      'Public Folder Sharing',
+      'Sharing a folder publicly will recursively grant access to ALL its contents. Do you want to proceed?',
+      'Share Publicly',
+      'Cancel'
+    )
+    if (!confirm) {
+      shareModal.accessLevel = 'private'
+    }
+  }
 })
 
 // Media Preview Modal
@@ -718,7 +936,7 @@ const mediaPan = reactive({ x: 0, y: 0 })
 const isPanning = ref(false)
 const panStart = reactive({ x: 0, y: 0 })
 
-const accountsList = ref([]) // Holds available accounts for sharing
+const accountsList = ref([]) 
 
 const fetchAccounts = async () => {
   try {
@@ -736,14 +954,14 @@ const infoModal = reactive({
 })
 
 // User role and hierarchy
-const userRole = ref('USER') // Can be 'OP', 'AD', 'USER'
-const userId = ref('') // Will populate dynamically if needed
-const userQuota = ref(30000000000) // 30GB default
+const userRole = ref('USER') 
+const userId = ref('') 
+const userQuota = ref(30000000000) 
 const usedQuota = ref(0)
 const additionalQuota = ref(0)
 const quotaPercentage = ref(0)
 
-// File system data with hierarchy
+// File system data
 const fileSystem = ref([])
 const isLoading = ref(true)
 
@@ -754,36 +972,39 @@ const setCurrentFilter = (filter) => {
   loadFiles('/', filter)
 }
 
-// Fetch files from backend API
 const loadFiles = async (folderPath = currentPath.value, filterMode = null) => {
   try {
     isLoading.value = true
     let endpoint = `/drive/files?folder_path=${encodeURIComponent(folderPath)}`
     
-    // Convert sidebar navigation options into API view_mode arguments
     if (filterMode === 'recent' || filterMode === 'starred' || filterMode === 'trash') {
       endpoint = `/drive/files?view_mode=${filterMode}`
     }
     
     const response = await apiGet(endpoint)
     
-    // Map backend model exactly to Nautilus UI demands
-    fileSystem.value = response.files.map(file => ({
-      id: file.id,
-      name: file.filename,
-      type: file.is_folder ? 'folder' : 'file',
-      mime_type: file.mime_type || '', // Used for determining Media Player formats
-      size: file.file_size || 0,
-      created: file.created_at,
-      modified: file.modified_at,
-      owner: file.owner.display_name || file.owner.username,
-      ownerRole: 'USER', 
-      path: file.file_path || (file.folder_path.endsWith('/') ? file.folder_path + file.filename : file.folder_path + '/' + file.filename),
-      is_starred: file.is_starred || false,
-      is_trashed: file.is_deleted || file.is_trashed || false, // Track trash state for Recent filter
-      labels: file.labels || [],
-      thumbnailError: false
-    }))
+    fileSystem.value = response.files.map(file => {
+      // PRE-CALCULATE common metadata for performance
+      const { group, ext } = getFileTypeDetails(file.filename)
+      return {
+        id: file.id,
+        name: file.filename,
+        type: file.is_folder ? 'folder' : 'file',
+        group, // optimized
+        ext,   // optimized
+        mime_type: file.mime_type || '', 
+        size: file.file_size || 0,
+        created: file.created_at,
+        modified: file.modified_at,
+        owner: file.owner.display_name || file.owner.username,
+        ownerRole: file.owner.role || 'USER', 
+        path: file.file_path || (file.folder_path.endsWith('/') ? file.folder_path + file.filename : file.folder_path + '/' + file.filename),
+        is_starred: file.is_starred || false,
+        is_trashed: file.is_deleted || file.is_trashed || false, 
+        labels: file.labels || [],
+        thumbnailError: false
+      }
+    })
     
     if (response.quota) {
       usedQuota.value = response.quota.used_space
@@ -798,7 +1019,6 @@ const loadFiles = async (folderPath = currentPath.value, filterMode = null) => {
     isLoading.value = false
   }
 }
-
 // Initial component API bindings
 onMounted(() => {
   const userData = localStorage.getItem('user')
@@ -814,6 +1034,12 @@ onMounted(() => {
   loadFiles()
   fetchAccounts()
   document.addEventListener('click', hideContextMenu)
+  document.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', hideContextMenu)
+  document.removeEventListener('keydown', handleKeyDown)
 })
 
 // Selection state
@@ -829,22 +1055,17 @@ const selectionBox = reactive({
 const currentFiles = computed(() => {
   let files = fileSystem.value
   
-  // In non-trash views, never show files that are in trash (deleted)
-  // This prevents deleted files from appearing in Recent/Starred/Home
   if (currentFilter.value !== 'trash') {
     files = files.filter(f => !f.is_trashed)
   }
   
-  // Apply hierarchy filtering based on user role
   if (userRole.value === 'USER') {
-    // USER can see their own files and shared files from AD
     files = files.filter(file => 
       file.ownerRole === 'USER' || 
       (file.ownerRole === 'AD' && file.accessLevel === 'account') ||
       (file.ownerRole === 'AD' && file.accessLevel === 'link')
     )
   } else if (userRole.value === 'AD') {
-    // AD can see their own files, all USER files, and shared files from OP
     files = files.filter(file => 
       file.ownerRole === 'AD' || 
       file.ownerRole === 'USER' ||
@@ -852,23 +1073,19 @@ const currentFiles = computed(() => {
       (file.ownerRole === 'OP' && file.accessLevel === 'link')
     )
   }
-  // OP can see all files (no filtering needed)
   
-  // Apply Search Query Name Matching
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     files = files.filter(file => file.name.toLowerCase().includes(q))
   }
   
-  // Apply Filters
   if (searchFilters.type) {
     if (searchFilters.type === 'folder') {
       files = files.filter(f => f.type === 'folder')
     } else {
       files = files.filter(f => {
         if (f.type === 'folder') return false
-        
-        const ext = f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : ''
+        const ext = f.ext
         switch(searchFilters.type) {
           case 'document': return ['pdf', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xls', 'xlsx'].includes(ext)
           case 'image': return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)
@@ -884,7 +1101,7 @@ const currentFiles = computed(() => {
   
   if (searchFilters.size) {
     files = files.filter(f => {
-      if (f.type === 'folder') return true // ignoring folder size for strict filtering usually
+      if (f.type === 'folder') return true 
       const sizeMB = f.size / (1024 * 1024)
       if (searchFilters.size === 'small') return sizeMB < 1
       if (searchFilters.size === 'medium') return sizeMB >= 1 && sizeMB <= 100
@@ -912,7 +1129,6 @@ const currentFiles = computed(() => {
   
   return files
 })
-
 const getFileTypeDetails = (fileName) => {
   if (!fileName || typeof fileName !== 'string') return { group: 'other', ext: '' }
   const parts = fileName.split('.')
@@ -920,11 +1136,12 @@ const getFileTypeDetails = (fileName) => {
   const ext = parts.pop().toLowerCase()
   
   let group = 'other'
-  if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'].includes(ext)) group = 'document'
+  if (['pdf'].includes(ext)) group = 'pdf'
+  else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'].includes(ext)) group = 'document'
   else if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) group = 'image'
   else if (['mp4', 'avi', 'mkv', 'mov', 'webm'].includes(ext)) group = 'video'
-  else if (['mp3', 'wav', 'ogg'].includes(ext)) group = 'audio'
-  else if (['zip', 'rar', 'tar', 'gz'].includes(ext)) group = 'archive'
+  else if (['mp3', 'wav', 'ogg', 'flac'].includes(ext)) group = 'audio'
+  else if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) group = 'archive'
   else if (['py', 'js', 'html', 'css', 'vue', 'json'].includes(ext)) group = 'code'
 
   return { group, ext }
@@ -988,11 +1205,12 @@ const getThumbnailUrl = (item) => {
   return `/api/drive/thumbnail/${item.id}?token=${token}`
 }
 
-// Generate authenticated URL for media streaming/download
-const mediaUrl = (item) => {
+const mediaUrl = (item, preview = false) => {
   if (!item) return ''
   const token = localStorage.getItem('token')
-  return `/api/drive/download/${item.id}?token=${token}`
+  let url = `/api/drive/download/${item.id}?token=${token}`
+  if (preview) url += '&preview=true'
+  return url
 }
 
 const downloadFile = (item) => {
@@ -1015,7 +1233,6 @@ const downloadSelectedItem = () => {
   }
   hideContextMenu()
 }
-
 // Media preview controls
 const closeMediaPreview = () => {
   mediaPreviewModal.visible = false
@@ -1028,6 +1245,7 @@ const closeMediaPreview = () => {
 }
 
 const handleMediaZoom = (event) => {
+  if (mediaPreviewModal.type !== 'image') return
   event.preventDefault()
   const delta = event.deltaY > 0 ? -0.1 : 0.1
   mediaZoom.value = Math.max(0.5, Math.min(5, mediaZoom.value + delta))
@@ -1063,24 +1281,34 @@ const selectFile = (item, multiSelect = false) => {
   }
 }
 
+const handleItemClick = (item, event) => {
+  const isMulti = event.ctrlKey || event.metaKey
+  selectFile(item, isMulti)
+  if (userStore.isSingleClickOpen && !isMulti) {
+    openFile(item)
+  }
+}
+
+const handleItemDoubleClick = (item) => {
+  if (!userStore.isSingleClickOpen) {
+    openFile(item)
+  }
+}
+
 let dragContainer = null
 
 const startDragSelection = (event) => {
-  if (event.shiftKey) return // Don't start drag selection if shift is pressed
+  if (event.shiftKey) return 
   
-  // Nautilus Logic: If we click an item, do NOT start marquee selection.
-  // This allows the browser to handle Drag-to-Move (draggable) on the item.
   const clickedItem = event.target.closest('.grid-item, .list-row');
   if (clickedItem) {
     const fileId = clickedItem.getAttribute('data-file-id');
-    // If clicking an unselected item, select it first
     if (fileId && !selectedFiles.value.includes(fileId)) {
        selectedFiles.value = [fileId];
     }
-    return; // Abort marquee, allow dragging the item
+    return; 
   }
   
-  // Clear selection if clicking empty space explicitly
   if (event.target.classList.contains('nautilus-content') || event.target.classList.contains('view-grid') || event.target.classList.contains('view-list')) {
      selectedFiles.value = []
   }
@@ -1089,7 +1317,6 @@ const startDragSelection = (event) => {
   const rect = dragContainer.getBoundingClientRect()
   selectionBox.visible = false
   
-  // Include scroll offsets to fix calculation sync
   selectionBox.startX = event.clientX - rect.left + dragContainer.scrollLeft
   selectionBox.startY = event.clientY - rect.top + dragContainer.scrollTop
   selectionBox.endX = selectionBox.startX
@@ -1098,10 +1325,8 @@ const startDragSelection = (event) => {
   document.addEventListener('mousemove', updateDragSelection)
   document.addEventListener('mouseup', endDragSelection)
 }
-
 const updateDragSelection = (event) => {
   if (!dragContainer) return
-  // Don't update marquee if we're dragging files
   if (event.dataTransfer && event.dataTransfer.types.includes('Files')) return;
 
   const rect = dragContainer.getBoundingClientRect()
@@ -1115,19 +1340,16 @@ const updateDragSelection = (event) => {
   
   if (!selectionBox.visible) return
   
-  // Prevent browser text highlighting during visual drag
   window.getSelection().removeAllRanges()
   
   selectionBox.endX = currentX
   selectionBox.endY = currentY
   
-  // Calculate selected items within the selection box
   const minX = Math.min(selectionBox.startX, selectionBox.endX)
   const maxX = Math.max(selectionBox.startX, selectionBox.endX)
   const minY = Math.min(selectionBox.startY, selectionBox.endY)
   const maxY = Math.max(selectionBox.startY, selectionBox.endY)
   
-  // Find all items within the selection box
   const items = document.querySelectorAll('.grid-item, .list-row')
   const newSelection = []
   
@@ -1135,13 +1357,11 @@ const updateDragSelection = (event) => {
     const itemRect = item.getBoundingClientRect()
     const containerRect = dragContainer.getBoundingClientRect()
     
-    // Convert to relative coordinates
     const itemLeft = itemRect.left - containerRect.left
     const itemRight = itemRect.right - containerRect.left
     const itemTop = itemRect.top - containerRect.top
     const itemBottom = itemRect.bottom - containerRect.top
     
-    // Box Intersect
     const intersectX = Math.max(0, Math.min(maxX, itemRight) - Math.max(minX, itemLeft))
     const intersectY = Math.max(0, Math.min(maxY, itemBottom) - Math.max(minY, itemTop))
     
@@ -1164,12 +1384,9 @@ const endDragSelection = (event) => {
 }
 
 const startItemDrag = (event, item) => {
-  // If the dragged item isn't in the selection, make it the only selected item
   if (!selectedFiles.value.includes(item.id)) {
     selectedFiles.value = [item.id]
   }
-  
-  // Set data for drag-and-drop operations
   const dragData = {
     type: 'drive-items',
     items: selectedFiles.value
@@ -1179,7 +1396,6 @@ const startItemDrag = (event, item) => {
 }
 
 const handleDriveDrop = async (event) => {
-  // Handle moving internal items
   try {
     const dataString = event.dataTransfer.getData('text/plain')
     if (dataString) {
@@ -1190,7 +1406,6 @@ const handleDriveDrop = async (event) => {
           const targetId = targetElement.getAttribute('data-file-id')
           const targetObj = currentFiles.value.find(f => f.id === targetId)
           if (targetObj && targetObj.type === 'folder' && !data.items.includes(targetId)) {
-            // Move items into this folder
             for (let id of data.items) {
                await apiPost('/drive/move', { file_id: id, target_folder: targetObj.path })
             }
@@ -1199,14 +1414,11 @@ const handleDriveDrop = async (event) => {
             loadFiles(currentPath.value, currentFilter.value)
           }
         }
-        return // We handled an internal move, don't trigger upload
+        return 
       }
     }
-  } catch (e) {
-    // Not valid JSON, probably a file drop
-  }
+  } catch (e) {}
   
-  // If we reach here, it's an external file drop. Open the upload modal.
   const files = Array.from(event.dataTransfer.files)
   if (files.length > 0) {
     uploadModal.dragOver = false
@@ -1224,21 +1436,17 @@ const openFile = (item) => {
   if (item.type === 'folder') {
     navigateToFolder(item)
   } else {
-    // Media View
     const group = getFileTypeDetails(item.name).group
-    const ext = item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : ''
+    const ext = item.ext
     
-    // Default config values
     mediaPreviewModal.item = item
     
-    // Type classification
     if (group === 'image') mediaPreviewModal.type = 'image'
     else if (group === 'video') mediaPreviewModal.type = 'video'
     else if (group === 'audio') mediaPreviewModal.type = 'audio'
     else if (['pdf', 'txt', 'csv', 'md'].includes(ext)) mediaPreviewModal.type = 'document'
     else mediaPreviewModal.type = 'other'
     
-    // Physics bounds reset
     mediaZoom.value = 1
     mediaPan.x = 0
     mediaPan.y = 0
@@ -1249,12 +1457,8 @@ const openFile = (item) => {
 
 const navigateToFolder = (folder) => {
   currentPath.value = folder.path
-  
-  // Update breadcrumb navigation correctly
   const pathParts = folder.path.split('/').filter(p => p)
   breadcrumb.value = ['Drive', ...pathParts]
-  
-  // Reload files from the new path
   loadFiles(folder.path)
 }
 
@@ -1270,7 +1474,6 @@ const navigateToBreadcrumb = (index) => {
     loadFiles(newPath)
   }
 }
-
 const createFolder = async () => {
   hideContextMenu()
   const name = await showPrompt('Create Folder', 'Enter folder name:', '', 'New Folder')
@@ -1295,7 +1498,12 @@ const uploadFiles = () => {
   hideContextMenu()
 }
 
-const closeUploadModal = () => {
+const removeFileFromUpload = (index) => {
+  if (uploadStatus.active) return
+  uploadModal.files.splice(index, 1)
+}
+
+const openUploadModal = (folderOnly = false) => {
   uploadModal.visible = false
   uploadModal.files = []
   uploadModal.dragOver = false
@@ -1303,40 +1511,119 @@ const closeUploadModal = () => {
 
 const handleFileSelect = (event) => {
   const files = Array.from(event.target.files)
-  uploadModal.files = files.map(file => ({
-    originalFile: file,
-    name: file.name,
-    size: file.size,
-    progress: 0
-  }))
+  uploadModal.files = files.map(file => {
+    // webkitRelativePath is available when selecting a folder via <input webkitdirectory>
+    // It looks like "folder/subfolder/file.ext"
+    // We want the directory part: "folder/subfolder"
+    const relPath = file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(0, -1).join('/') : ''
+    
+    return {
+      originalFile: file,
+      name: file.name,
+      size: file.size,
+      relPath: relPath, // Store relative path for backend
+      progress: 0,
+      status: 'pending'
+    }
+  })
+  uploadModal.visible = true
 }
 
-const handleDrop = (event) => {
+const handleDrop = async (event) => {
   event.preventDefault()
   uploadModal.dragOver = false
-  const files = Array.from(event.dataTransfer.files)
-  uploadModal.files = files.map(file => ({
-    originalFile: file,
-    name: file.name,
-    size: file.size,
-    progress: 0
-  }))
+  
+  const items = event.dataTransfer.items
+  if (!items) return
+  
+  const files = []
+  
+  // Recursively traverse dropped items
+  const traverseFileTree = async (entry, path = '') => {
+    if (entry.isFile) {
+      const file = await new Promise((resolve) => entry.file(resolve))
+      files.push({
+        originalFile: file,
+        name: file.name,
+        size: file.size,
+        relPath: path,
+        progress: 0,
+        status: 'pending'
+      })
+    } else if (entry.isDirectory) {
+      const dirReader = entry.createReader()
+      const readAllEntries = async () => {
+        let allEntries = []
+        let readNext = async () => {
+          const entries = await new Promise((resolve) => dirReader.readEntries(resolve))
+          if (entries.length > 0) {
+            allEntries = allEntries.concat(entries)
+            await readNext()
+          }
+        }
+        await readNext()
+        return allEntries
+      }
+      
+      const entries = await readAllEntries()
+      for (const childEntry of entries) {
+        await traverseFileTree(childEntry, path ? `${path}/${entry.name}` : entry.name)
+      }
+    }
+  }
+  
+  const promises = []
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry()
+    if (entry) {
+      promises.push(traverseFileTree(entry))
+    }
+  }
+  
+  await Promise.all(promises)
+  
+  if (files.length > 0) {
+    uploadModal.files = files
+    uploadModal.visible = true
+  }
 }
 
 const startUpload = async () => {
   if (uploadModal.files.length === 0) return
   
-  let successCount = 0
-  const duplicates = []
-  const errors = []
-
-  for (let fileObj of uploadModal.files) {
+  // Set global upload status
+  uploadStatus.active = true
+  uploadStatus.minimized = false
+  uploadStatus.expanded = true
+  
+  // Move files to global tracker with initial states
+  const newUploads = uploadModal.files.map(f => ({
+    name: f.name,
+    size: f.size,
+    progress: 0,
+    status: 'uploading',
+    icon: getFileIcon(f.name),
+    originalFile: f.originalFile,
+    relPath: f.relPath
+  }))
+  
+  uploadStatus.files = [...newUploads, ...uploadStatus.files]
+  
+  // Close the selection modal
+  closeUploadModal()
+  
+  // Process each file in the background
+  for (let fileObj of newUploads) {
     const formData = new FormData()
     formData.append('file', fileObj.originalFile)
-    formData.append('folder_path', currentPath.value === '/' ? '/' : currentPath.value)
     
-    fileObj.progress = 0
-    fileObj.status = 'uploading'
+    let targetFolder = currentPath.value === '/' ? '' : currentPath.value
+    if (fileObj.relPath) {
+      targetFolder = targetFolder ? `${targetFolder}/${fileObj.relPath}` : `/${fileObj.relPath}`
+    }
+    if (!targetFolder) targetFolder = '/'
+    
+    formData.append('folder_path', targetFolder)
     
     try {
       await apiUpload('/drive/upload', formData, (progress) => {
@@ -1344,40 +1631,33 @@ const startUpload = async () => {
       })
       fileObj.progress = 100
       fileObj.status = 'done'
-      successCount++
+      uploadStatus.successCount++
     } catch (err) {
+      console.error('Upload Error Details:', err, err.status, err.message)
       if (err.status === 409 || (err.message && err.message.includes('already exists'))) {
         fileObj.status = 'duplicate'
         fileObj.progress = 0
-        duplicates.push(fileObj.name)
       } else {
         fileObj.status = 'error'
         fileObj.progress = 0
-        errors.push(fileObj.name)
+        uploadStatus.errorCount++
         console.error('Upload Error:', err)
       }
     }
   }
 
-  if (successCount > 0) {
-    showSuccess(`${successCount} file${successCount !== 1 ? 's' : ''} uploaded successfully`)
-  }
-  if (duplicates.length > 0) {
-    showError(`⚠️ ${duplicates.length} duplicate${duplicates.length !== 1 ? 's' : ''} skipped: ${duplicates.join(', ')}`)
-  }
-  if (errors.length > 0) {
-    showError(`${errors.length} file${errors.length !== 1 ? 's' : ''} failed to upload`)
-  }
-
-  if (errors.length === 0 && successCount > 0) {
-    closeUploadModal()
-  }
-  if (successCount > 0) {
-    loadFiles(currentPath.value)
-  }
+  // Reload files once all in this batch are done
+  await loadFiles(currentPath.value, currentFilter.value)
 }
 
-
+const clearCompletedUploads = () => {
+  uploadStatus.files = uploadStatus.files.filter(f => f.status === 'uploading')
+  if (uploadStatus.files.length === 0) {
+    uploadStatus.active = false
+    uploadStatus.successCount = 0
+    uploadStatus.errorCount = 0
+  }
+}
 const renameSelection = async () => {
   hideContextMenu();
   const items = selectedFiles.value.length > 0 ? selectedFiles.value : (contextMenu.item ? [contextMenu.item.id] : []);
@@ -1400,7 +1680,7 @@ const renameSelection = async () => {
        try {
          for (let i = 0; i < items.length; i++) {
             const itemObj = currentFiles.value.find(f => f.id === items[i]);
-            const ext = itemObj.name.includes('.') ? '.' + itemObj.name.split('.').pop() : '';
+            const ext = itemObj.ext ? '.' + itemObj.ext : '';
             const newName = `${baseName} (${i+1})${ext}`;
             await apiPost('/drive/move', { file_id: items[i], target_folder: currentPath.value === '/' ? '/' : currentPath.value, new_name: newName });
          }
@@ -1476,13 +1756,39 @@ const createFolderWithSelection = async () => {
    }
 }
 
-const shareItem = () => {
+const shareItem = async () => {
   if (contextMenu.item) {
-    shareModal.item = contextMenu.item
-    shareModal.visible = true
-    if (accountsList.value.length === 0) fetchAccounts()
+    const originalItem = contextMenu.item
+    hideContextMenu()
+    
+    try {
+      // Fetch latest metadata to ensure share state is accurate
+      const item = await apiGet(`/drive/file/${originalItem.id}`)
+      
+      shareModal.item = item
+      // Correctly map access level
+      if (item.access_level === 'only_me' || !item.access_level) {
+        shareModal.accessLevel = 'private'
+      } else if (item.access_level === 'public') {
+        shareModal.accessLevel = 'link'
+      } else if (item.access_level === 'specific_users') {
+        shareModal.accessLevel = 'account'
+      } else {
+        shareModal.accessLevel = 'private'
+      }
+      
+      shareModal.permissionLevel = item.permission_level || 'viewer'
+      shareModal.encrypted = item.has_password || false
+      shareModal.generatedLink = item.share_link_id ? `${window.location.origin}/s/${item.share_link_id}` : ''
+      shareModal.visible = true
+      
+      if (accountsList.value.length === 0) fetchAccounts()
+    } catch (err) {
+      showError('Failed to fetch share settings')
+    }
+  } else {
+    hideContextMenu()
   }
-  hideContextMenu()
 }
 
 const closeShareModal = () => {
@@ -1496,7 +1802,8 @@ const saveShareSettings = async () => {
   try {
     const payload = {
       file_id: shareModal.item.id,
-      access_level: shareModal.accessLevel,
+      access_level: shareModal.accessLevel === 'private' ? 'only_me' : shareModal.accessLevel,
+      permission_level: shareModal.permissionLevel,
       share_type: 'read'
     }
     
@@ -1507,12 +1814,11 @@ const saveShareSettings = async () => {
        payload.access_level = 'public';
        if (shareModal.encrypted) {
           const pass = await showPrompt('Password Protect Link', 'Enter a password for this link:', '');
-          if (!pass) return; // Cancelled
+          if (!pass) return; 
           payload.share_password = pass;
        }
     }
     
-    // The shortLink toggle is implicitly handled by the backend generating a 6-character short_id!
     const res = await apiPost('/drive/share', payload)
 
     if (res.share_link) {
@@ -1527,13 +1833,17 @@ const saveShareSettings = async () => {
   }
 }
 
+const downloadFolderZip = (item) => {
+  window.open(`/api/drive/zip/${item.id}`)
+  hideContextMenu()
+}
+
 const copyLink = () => {
   if (shareModal.generatedLink) {
     navigator.clipboard.writeText(shareModal.generatedLink)
     showSuccess('Link copied to clipboard')
   }
 }
-
 const showInfo = () => {
   if (contextMenu.item) {
     infoModal.item = contextMenu.item
@@ -1675,24 +1985,29 @@ const hideContextMenu = () => {
   contextMenu.visible = false
 }
 
-// Global Keybinds
 const handleKeyDown = (e) => {
   if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
   
   if (e.key === 'Escape') {
     selectedFiles.value = [];
     hideContextMenu();
-    cancelPrompt();         // close prompt modal
+    cancelPrompt();         
     closeUploadModal();
     closeShareModal();
     closeInfoModal();
-    closeMediaPreview();    // close media viewer
+    closeMediaPreview();    
   } else if (e.key === 'Delete') {
-    if (selectedFiles.value.length > 0 || contextMenu.item) {
-      if (currentFilter.value === 'trash') {
+    if (e.shiftKey) {
+      if (selectedFiles.value.length > 0 || contextMenu.item) {
         deleteSelectionPermanently();
-      } else {
-        deleteSelection();
+      }
+    } else {
+      if (selectedFiles.value.length > 0 || contextMenu.item) {
+        if (currentFilter.value === 'trash') {
+          deleteSelectionPermanently();
+        } else {
+          deleteSelection();
+        }
       }
     }
   } else if (e.key === 'Enter') {
@@ -1700,9 +2015,13 @@ const handleKeyDown = (e) => {
       confirmPrompt();
     } else if (selectedFiles.value.length === 1 || contextMenu.item) {
       const target = contextMenu.item || currentFiles.value.find(f => f.id === selectedFiles.value[0]);
-      if (target && target.type === 'folder') {
+      if (target) {
         openFile(target);
       }
+    }
+  } else if (e.key === 'F2') {
+    if (selectedFiles.value.length === 1 || contextMenu.item) {
+      renameSelection();
     }
   } else if (e.ctrlKey && e.key === 'a') {
     e.preventDefault();
@@ -1710,36 +2029,38 @@ const handleKeyDown = (e) => {
   }
 };
 
-// Lifecycle
 onMounted(() => {
-  document.addEventListener('click', hideContextMenu)
-  document.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', hideContextMenu)
-  document.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keydown', handleKeyDown)
 })
-</script>\n\n<style scoped>
+
+</script>
+
+<style scoped>
 .nautilus-drive {
   display: flex;
-  height: calc(100vh - 70px); /* Fill dashboard under header */
-  width: 100%;
+  position: absolute;
+  top: 70px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: auto;
+  width: auto;
   background: transparent;
   overflow: hidden;
-  position: relative;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   gap: 1rem;
 }
 
-/* Glass panel uniform properties */
 .glass-panel {
   background: var(--glass-bg-primary);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(10px);
 }
 
-/* ---- Left Sidebar ---- */
 .nautilus-sidebar {
   width: 250px;
   display: flex;
@@ -1747,6 +2068,8 @@ onUnmounted(() => {
   padding: 1rem 0;
   border-radius: 12px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 60;
 }
 
 .sidebar-header {
@@ -1861,8 +2184,6 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-
-/* ---- Main Content Area ---- */
 .nautilus-main {
   flex: 1;
   display: flex;
@@ -1879,6 +2200,8 @@ onUnmounted(() => {
   border-radius: 12px;
   height: 60px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 50;
 }
 
 .breadcrumbs {
@@ -1975,7 +2298,7 @@ onUnmounted(() => {
 
 .search-filters {
   position: absolute;
-  top: 110%; /* Just below the search box */
+  top: 110%; 
   right: 0;
   width: 300px;
   background: rgba(20, 20, 25, 0.95);
@@ -2026,7 +2349,6 @@ onUnmounted(() => {
   text-decoration: underline;
 }
 
-/* Content Area */
 .nautilus-content {
   flex: 1;
   background: var(--glass-bg-secondary);
@@ -2039,7 +2361,6 @@ onUnmounted(() => {
   user-select: none;
 }
 
-/* Grid View */
 .view-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -2135,20 +2456,41 @@ onUnmounted(() => {
   text-align: center;
   font-weight: 500;
   color: var(--text-primary);
-  word-break: break-all;
+  width: 100%;
+  padding: 0 4px;
+  
+  /* Default: Truncate to one line */
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  
+  transition: all 0.2s ease;
+}
+
+.grid-item.selected .item-name {
+  /* Selected: Show full name */
+  white-space: normal;
+  word-break: break-all;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4; /* Allow up to 4 lines when selected */
   -webkit-box-orient: vertical;
+  overflow: visible;
+  text-overflow: initial;
 }
 
 .file-thumbnail-grid {
-  width: 60px;
-  height: 60px;
+  width: 80px;
+  height: 80px;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.file-thumbnail-grid:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.4);
 }
 
 .file-thumbnail-list {
@@ -2165,7 +2507,6 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-/* Selection Box */
 .selection-box {
   position: absolute;
   background: rgba(59, 130, 246, 0.2);
@@ -2174,7 +2515,6 @@ onUnmounted(() => {
   z-index: 10;
 }
 
-/* List View */
 .view-list {
   display: flex;
   flex-direction: column;
@@ -2230,7 +2570,6 @@ onUnmounted(() => {
   font-size: 1.25rem;
 }
 
-/* Empty State */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -2246,8 +2585,6 @@ onUnmounted(() => {
   opacity: 0.5;
 }
 
-
-/* ---- Right Details Sidebar ---- */
 .nautilus-details {
   position: absolute;
   right: 0;
@@ -2345,7 +2682,35 @@ onUnmounted(() => {
   border-color: rgba(239, 68, 68, 0.3);
 }
 
-/* ---- Context Menu ---- */
+.property-modal-box {
+  max-width: 400px;
+}
+
+.properties-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.detail-row .label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.detail-row .value {
+  color: var(--text-primary);
+  text-align: right;
+  max-width: 60%;
+  word-break: break-all;
+}
+
 .context-menu {
   position: fixed;
   z-index: 1000;
@@ -2390,10 +2755,236 @@ onUnmounted(() => {
   margin: 0.5rem 0;
 }
 
-/* Hidden elements */
-.hidden-input { display: none; }
+.hidden-input { 
+  opacity: 0; 
+  position: absolute; 
+  pointer-events: none; 
+  width: 1px; 
+  height: 1px; 
+}
 
-/* Modals Refined */
+/* Sidebar Refinement */
+.sidebar-creation-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.create-btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0.8rem 1.2rem;
+  font-size: 0.95rem;
+}
+
+/* Dropdown Styles */
+.dropdown-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 5px;
+  z-index: 1100;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.dropdown-item {
+  padding: 0.8rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 0.9rem;
+}
+
+.dropdown-item:hover {
+  background: var(--glass-bg-hover);
+}
+
+.dropdown-item i {
+  color: var(--accent-primary);
+  width: 16px;
+  text-align: center;
+}
+
+/* Scrollable List in Modal */
+.scrollable-list {
+  margin-top: 1.5rem;
+}
+
+.scrollable-list .list-container {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.1);
+  padding: 0.5rem;
+}
+
+.scrollable-list .upload-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.scrollable-list .upload-item:last-child {
+  border-bottom: none;
+}
+
+.file-main-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+}
+
+.file-meta-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: 1rem;
+}
+
+.file-size {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.remove-file-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.remove-file-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Global Progress Panel */
+.global-upload-progress {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 360px;
+  z-index: 2000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 15px 50px rgba(0,0,0,0.6);
+  border: 1px solid var(--accent-primary);
+  background: var(--glass-bg-primary);
+}
+
+.global-upload-progress.minimized {
+  width: 280px;
+  bottom: 1rem;
+}
+
+.progress-header {
+  padding: 0.75rem 1rem;
+  background: var(--accent-primary);
+  color: #0f172a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #0f172a;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.icon-btn:hover {
+  background: rgba(15, 23, 42, 0.1);
+}
+
+.progress-body {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.progress-item {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.progress-item:last-child {
+  border-bottom: none;
+}
+
+.item-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  gap: 0.5rem;
+}
+
+.item-name {
+  flex: 1;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.item-bar-container {
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.item-bar {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -2417,6 +3008,26 @@ onUnmounted(() => {
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(20px);
+  transition: max-width 0.3s ease, width 0.3s ease, height 0.3s ease;
+}
+
+.document-preview-modal {
+  max-width: 90vw !important;
+  width: 90vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.document-preview-modal .media-preview-body {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.document-preview-modal iframe {
+  width: 100%;
+  height: 100%;
 }
 
 .modal-header {
@@ -2462,6 +3073,7 @@ onUnmounted(() => {
   text-align: center;
   cursor: pointer;
   transition: all 0.3s;
+  display: block;
 }
 
 .upload-area.drag-over, .upload-area:hover {
@@ -2491,16 +3103,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.upload-item .file-name {
-  flex: 1;
-  font-size: 0.9rem;
-}
-
-.upload-item .file-size {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
 .upload-progress-bar {
   position: absolute;
   bottom: 0;
@@ -2516,43 +3118,6 @@ onUnmounted(() => {
   transition: width 0.3s;
 }
 
-.upload-status-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.upload-status-badge.duplicate {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-}
-
-.upload-status-badge.done {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.3);
-}
-
-.upload-status-badge.error {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.upload-item.duplicate {
-  opacity: 0.7;
-  background: rgba(251, 191, 36, 0.05);
-}
-
-.upload-item.error {
-  background: rgba(239, 68, 68, 0.05);
-}
-
-
 .form-group {
   margin-bottom: 1.5rem;
   display: flex;
@@ -2560,18 +3125,13 @@ onUnmounted(() => {
   gap: 0.5rem;
 }
 
-.form-select, .form-control {
+.form-select, .form-input, .form-control {
   padding: 0.75rem;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--glass-border);
   border-radius: 6px;
   color: white;
   font-size: 0.95rem;
-}
-
-.form-select:focus, .form-control:focus {
-  outline: none;
-  border-color: var(--primary-color);
 }
 
 .toggle-group {
@@ -2617,24 +3177,25 @@ input:checked + .toggle-slider:before {
   transform: translateX(20px);
 }
 
-.link-display {
+.modal-title-with-summary {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.link-display input { flex: 1; }
+.upload-summary-badge {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-block;
+  width: fit-content;
+}
 
 @media (max-width: 768px) {
   .nautilus-drive {
     flex-direction: column;
-    overflow-y: auto;
-  }
-  .nautilus-sidebar {
-    width: 100%;
-  }
-  .nautilus-details {
-    width: 100%;
   }
 }
 </style>

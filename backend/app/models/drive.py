@@ -1,6 +1,6 @@
 from mongoengine import Document, EmbeddedDocument
 from mongoengine.fields import (
-    StringField, DateTimeField, IntField, BooleanField,
+    StringField, DateTimeField, IntField, LongField, BooleanField,
     ListField, EmbeddedDocumentField, ReferenceField, FloatField
 )
 from app.models.user import User
@@ -17,6 +17,7 @@ class DriveFileShare(EmbeddedDocument):
     share_link = StringField()     # Encrypted share link
     is_public = BooleanField(default=False)
     access_level = StringField(choices=['only_me', 'specific_users', 'internal', 'public'], default='only_me')
+    permission_level = StringField(choices=['visitor', 'viewer', 'commenter', 'editor'], default='viewer')
     allowed_users = ListField(ReferenceField(User))  # List of specific users allowed
 
 class DriveFile(Document):
@@ -27,7 +28,7 @@ class DriveFile(Document):
     stored_filename = StringField(required=True)    # Stored filename (UUID)
     file_path = StringField(required=True)          # Full file path
     mime_type = StringField(required=True)           # MIME type
-    file_size = IntField(required=True)             # File size in bytes
+    file_size = LongField(required=True)             # File size in bytes
     
     # User and folder information
     owner = ReferenceField(User, required=True)     # File owner
@@ -38,6 +39,7 @@ class DriveFile(Document):
     # Sharing information
     shares = ListField(EmbeddedDocumentField(DriveFileShare))
     access_level = StringField(choices=['only_me', 'specific_users', 'internal', 'public'], default='only_me')
+    permission_level = StringField(choices=['visitor', 'viewer', 'commenter', 'editor'], default='viewer')
     allowed_users = ListField(ReferenceField(User))  # List of specific users allowed
     public_share_link = StringField()                   # Full frontend route
     share_link_id = StringField(max_length=6, unique=True, sparse=True) # The 6-character encrypted link ID
@@ -84,10 +86,12 @@ class DriveFile(Document):
         return {
             'id': str(self.id),
             'filename': self.filename,
+            'name': self.filename,
             'stored_filename': self.stored_filename,
             'file_path': self.file_path,
             'mime_type': self.mime_type,
             'file_size': self.file_size,
+            'size': self.file_size,
             'owner': {
                 'id': str(self.owner.id),
                 'username': self.owner.username,
@@ -124,6 +128,7 @@ class DriveFile(Document):
                 } for share in self.shares
             ],
             'access_level': self.access_level,
+            'permission_level': getattr(self, 'permission_level', 'viewer'),
             'allowed_users': [
                 {
                     'id': str(user.id),
@@ -153,9 +158,9 @@ class DriveQuota(Document):
     """User drive quota management"""
     
     user = ReferenceField(User, required=True, unique=True)
-    used_space = IntField(default=0)          # Used space in bytes
-    total_quota = IntField(default=30*1024*1024*1024)  # 30GB default
-    additional_quota = IntField(default=0)    # Additional quota allocated by OP
+    used_space = LongField(default=0)          # Used space in bytes
+    total_quota = LongField(default=30*1024*1024*1024)  # 30GB default
+    additional_quota = LongField(default=0)    # Additional quota allocated by OP
     
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)

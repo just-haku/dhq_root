@@ -15,13 +15,18 @@
     <!-- Main Content routing -->
     <router-view v-slot="{ Component }">
       <transition name="page-fade" mode="out-in">
-        <component :is="Component" />
+        <component :is="Component" v-if="Component" />
       </transition>
     </router-view>
 
     <!-- Global Notification Singleton -->
     <LiquidGlassNotification 
-      v-bind="notificationState"
+      :show="notificationState.show"
+      :type="notificationState.type"
+      :title="notificationState.title"
+      :message="notificationState.message"
+      :icon="notificationState.icon"
+      :duration="notificationState.duration"
       @close="closeNotification"
     />
   </div>

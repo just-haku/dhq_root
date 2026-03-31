@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     STORAGE3: Optional[str] = None
     STORAGE4: Optional[str] = None
     
+    # Vault
+    vault_master_key: str
+    
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

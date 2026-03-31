@@ -145,6 +145,23 @@
                 </div>
               </div>
             </section>
+
+            <section class="settings-section mt-8">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3>Item Interaction</h3>
+                  <p class="section-desc">Choose how you interact with files and folders in the Drive and Vault.</p>
+                </div>
+                <label class="switch-modern">
+                  <input type="checkbox" :checked="userStore.isSingleClickOpen" @change="toggleSingleClickOpen">
+                  <span class="slider-modern round"></span>
+                </label>
+              </div>
+              <p class="text-sm text-gray-400 mt-2">
+                <i class="fas fa-info-circle mr-1"></i>
+                When enabled, one click opens folders and previews files.
+              </p>
+            </section>
           </div>
 
           <!-- Credentials & API Settings -->
@@ -397,6 +414,17 @@ const updateLayout = async (layout) => {
     showSuccess(`Layout updated to ${layout} view`)
   } catch (e) {
     showError('Failed to update layout')
+  }
+}
+
+const toggleSingleClickOpen = async (event) => {
+  const newVal = event.target.checked
+  try {
+    await apiPatch('/user/appearance', { is_single_click_open: newVal })
+    userStore.setUser({ is_single_click_open: newVal })
+    showSuccess(`One click to open: ${newVal ? 'Enabled' : 'Disabled'}`)
+  } catch (e) {
+    showError('Failed to update interaction preference')
   }
 }
 
@@ -1161,5 +1189,58 @@ select option {
   .layout-toggle-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Modern Switch */
+.switch-modern {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+}
+
+.switch-modern input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider-modern {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--glass-bg-hover);
+  transition: .3s;
+  border: 1px solid var(--glass-border);
+}
+
+.slider-modern:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+}
+
+input:checked + .slider-modern {
+  background-color: var(--primary-color);
+}
+
+input:checked + .slider-modern:before {
+  transform: translateX(22px);
+}
+
+.slider-modern.round {
+  border-radius: 22px;
+}
+
+.slider-modern.round:before {
+  border-radius: 50%;
 }
 </style>

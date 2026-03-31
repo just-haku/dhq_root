@@ -1,0 +1,56 @@
+{
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "drive": "Drive",
+    "email": "Email Hub",
+    "chat": "Convo Hub",
+    "collaboration": "Collaboration",
+    "cnc": "CNC / G-Code",
+    "arcade": "Arcade",
+    "admin": "Admin",
+    "performance": "Server Performance",
+    "settings": "Personal Settings",
+    "users": "Manage Users",
+    "database": "Database Records",
+    "kpi_ledger": "KPI Ledger",
+    "store_orders": "Store Orders",
+    "game_scores": "Game Scores",
+    "admin_config": "Manage Server Settings",
+    "order_center": "Order Center",
+    "task_center": "Task Center",
+    "shop": "Shop",
+    "notification_center": "Notification Center",
+    "personalize": "Personalize",
+    "scan_virus": "Scan Virus",
+    "daily_gift": "Daily Gift",
+    "panic_mode": "Panic Mode",
+    "manage_role": "Manage Role",
+    "vault": "Vault",
+    "manage_quotas": "Manage Quotas",
+    "nuke_data": "Nuke Data",
+    "manage_shop": "Manage Shop",
+    "working_mode": "Working Mode",
+    "manage_gifts": "Manage Gifts"
+  },
+  "settings": {
+    "theme": "Theme",
+    "language": "Language",
+    "logout": "Logout",
+    "profile": "Profile"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error"
+  },
+  "power_saver": {
+    "normal": "Normal Mode",
+    "powersaver": "Power Saver Mode",
+    "active": "Active",
+    "banner": "SYSTEM IS OPERATING IN POWER SAVER MODE"
+  }
+}

@@ -55,6 +55,25 @@ class EmailService:
             logger.error(f"Failed to send OTP to {recipient_email}: {str(e)}")
             return False
 
+    def send_system_alert(self, recipient_email: str, subject: str, html_content: str) -> bool:
+        """General purpose system alert email"""
+        try:
+            message = MIMEMultipart("alternative")
+            message["Subject"] = subject
+            message["From"] = self.sender_email
+            message["To"] = recipient_email
+            
+            message.attach(MIMEText(html_content, "html"))
+            context = ssl.create_default_context()
+            with smtplib.SMTP(self.smtp_server, self.port) as server:
+                server.starttls(context=context)
+                server.login(self.sender_email, self.password)
+                server.sendmail(self.sender_email, recipient_email, message.as_string())
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send system alert to {recipient_email}: {str(e)}")
+            return False
+
     def fetch_emails(self, user: User, limit: int = 20):
         """Fetch unread emails using IMAP PEEK to avoid marking as seen"""
         if not user.email_creds or not user.email_creds.get('email') or not user.email_creds.get('password'):

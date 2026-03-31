@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import connect_db, disconnect_db
 import os
 import logging
+from app.core.storage import storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,12 @@ class LargeFileUploadMiddleware(BaseHTTPMiddleware):
         content_length = request.headers.get("content-length")
         if content_length:
             content_length = int(content_length)
-            max_size = 2 * 1024 * 1024 * 1024  # 2GB
+            max_size = 10 * 1024 * 1024 * 1024  # 10GB
             if content_length > max_size:
                 from fastapi import HTTPException
                 raise HTTPException(
                     status_code=413,
-                    detail=f"Request entity too large. Maximum size is {max_size // (1024*1024)}MB"
+                    detail=f"Request entity too large. Maximum size is {max_size // (1024*1024*1024)}GB"
                 )
         
         response = await call_next(request)
@@ -37,15 +38,20 @@ async def lifespan(app: FastAPI):
     from app.services.order_center_worker import order_center_worker
     from app.services.service_cache_task import service_cache_task
     from app.services.email_watcher import email_watcher
+    from app.services.system_watcher import system_watcher
+    from app.api.ai_chat import start_download_cleanup_task
     await order_center_worker.start()
     await service_cache_task.start()
     await email_watcher.start_all_watchers()
-    logger.info("Order Center, Service Cache, and Email Watchers started")
+    await system_watcher.start()
+    start_download_cleanup_task()
+    logger.info("Order Center, Service Cache, Email Watchers, System Watcher, and AI Cleanup Task started")
     yield
     await order_center_worker.stop()
     await service_cache_task.stop()
     await email_watcher.stop_all_watchers()
-    logger.info("Order Center, Service Cache, and Email Watchers stopped")
+    await system_watcher.stop()
+    logger.info("Order Center, Service Cache, Email Watchers, and System Watcher stopped")
 
 # Create FastAPI app with custom middleware
 app = FastAPI(
@@ -60,7 +66,14 @@ app.add_middleware(LargeFileUploadMiddleware)
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=[
+        "http://localhost:3001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3000",
+        "https://haku.io.vn",
+        "http://haku.io.vn"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,11 +85,15 @@ connect_db()
 if os.path.exists("frontend/dist"):
     app.mount("/static", StaticFiles(directory="frontend/dist"), name="static")
 
-# Mount uploads directory for avatars and banners
-if not os.path.exists("uploads"):
-    os.makedirs("uploads/avatars", exist_ok=True)
-    os.makedirs("uploads/banners", exist_ok=True)
-app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Mount uploads directory for avatars and banners from external storage if possible
+primary_storage = storage_service.storages[0]
+avatar_dir = os.path.join(primary_storage, "avatars")
+banner_dir = os.path.join(primary_storage, "banners")
+os.makedirs(avatar_dir, exist_ok=True)
+os.makedirs(banner_dir, exist_ok=True)
+
+app.mount("/api/uploads/avatars", StaticFiles(directory=avatar_dir), name="avatars")
+app.mount("/api/uploads/banners", StaticFiles(directory=banner_dir), name="banners")
 
 @app.get("/", response_class=HTMLResponse)
 async def decoy_landing():
@@ -140,13 +157,13 @@ async def health_check():
     return {"status": "healthy", "service": "DHQ Backend"}
 
 # Import and include routers
-from app.api import auth, admin, hub, arcade, gifts, gifts_management, activity, monitoring, user_management, ordering, ordering_enhanced, organic_ordering, smart_collaboration, kpi_bonus, drive, test_api, gcode_generator, economy, order_center, mock_api, email_hub, prompt_api, virus_scan
-# ...
+from app.api import auth, admin, hub, arcade, gifts, gifts_management, activity, monitoring, user_management, ordering, ordering_enhanced, organic_ordering, smart_collaboration, kpi_bonus, drive, test_api, gcode_generator, economy, order_center, mock_api, email_hub, prompt_api, virus_scan, ai_chat, system_config, vault_api, public_api
+# Standard API routes
+app.include_router(vault_api.router, prefix="/api", tags=["vault"])
 app.include_router(virus_scan.router, prefix="/api/scan", tags=["virus-scan"])
 from app.api.games import wordle, typing, memory, tictactoe, bovo, blackjack, bigtwo, common
 from app.api import api_management
 
-# Standard API routes
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(hub.router, prefix="/api/hub", tags=["hub"])
@@ -163,6 +180,8 @@ app.include_router(order_center.router, prefix="/api/order-center", tags=["order
 app.include_router(mock_api.router, prefix="/api/mock-api", tags=["mock-api"])
 app.include_router(email_hub.router, prefix="/api/emails", tags=["Emails"])
 app.include_router(prompt_api.router, prefix="/api/prompts", tags=["Prompts"])
+app.include_router(ai_chat.router, prefix="/api/ai", tags=["ai-chat"])
+app.include_router(system_config.router, prefix="/api/system", tags=["system-config"])
 
 # Game routes
 app.include_router(wordle.router, prefix="/api/games/wordle", tags=["games-wordle"])
@@ -181,6 +200,7 @@ app.include_router(api_management.router, prefix="/api/api-management", tags=["a
 app.include_router(drive.router, prefix="/api", tags=["drive"])
 app.include_router(test_api.router, prefix="/api", tags=["test-api"])
 app.include_router(gcode_generator.router, prefix="/api", tags=["gcode-generator"])
+app.include_router(public_api.router, prefix="/api", tags=["public"])
 
 # Hidden routes (obfuscated)
 app.include_router(auth.router, prefix=settings.REAL_LOGIN_ROUTE.replace("/login", ""), tags=["hidden-auth"])

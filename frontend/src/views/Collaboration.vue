@@ -65,11 +65,11 @@
     </div>
 
     <!-- Create/Edit Collaboration Modal -->
-    <div v-if="collaborationModal.visible" class="modal-overlay" @click="closeCollaborationModal">
+    <div v-if="collaborationModal.visible" class="modal-overlay" @click.self="attemptCloseModal">
       <div class="modal-content large" @click.stop>
         <div class="modal-header">
           <h2>{{ collaborationModal.isEdit ? 'Edit' : 'Create' }} Collaboration</h2>
-          <button class="close-btn" @click="closeCollaborationModal">
+          <button class="close-btn" @click="attemptCloseModal">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -268,12 +268,13 @@
                     <div class="video-upload">
                       <div class="upload-area" @click="selectVideo(index)">
                         <i class="fas fa-video"></i>
-                        <span>{{ video.draftFile ? video.draftFile.name : 'Click to upload or paste link' }}</span>
+                        <span>{{ video.draftFile || video.draftLink ? `Draft Link for ${collaborationForm.name || 'Untitled'} Video ${index + 1}` : 'Click to upload or paste link' }}</span>
                       </div>
                       <input 
                         type="file" 
                         accept="video/*"
                         @change="handleVideoUpload($event, index)"
+                        :id="`videoInput-${index}`"
                         :ref="`videoInput-${index}`"
                         style="display: none"
                       />
@@ -322,9 +323,9 @@
               </div>
             </div>
 
-            <div class="form-actions">
-              <button type="button" class="btn-secondary" @click="closeCollaborationModal">
-                Cancel
+            <div class="form-actions sticky-actions">
+              <button type="button" class="btn-secondary" @click="attemptCloseModal">
+                Cancel / Exit
               </button>
               <button type="button" class="btn-danger" @click="haltCollaboration" v-if="collaborationModal.isEdit && collaborationModal.currentCollab.status !== 'Halted'">
                 <i class="fas fa-pause"></i>
@@ -404,7 +405,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { showSuccess, showError, showConfirm } from '@/utils/notification'
-import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api'
+import { apiGet, apiPost, apiPut, apiDelete, apiPostForm } from '@/utils/api'
 
 // Reactive state
 const activeFilter = ref('On Going')
@@ -429,6 +430,12 @@ const collaborationForm = reactive({
   price: 0,
   numVideos: 1,
   videos: []
+})
+
+const originalFormStr = ref('')
+
+const isDirty = computed(() => {
+  return JSON.stringify(collaborationForm) !== originalFormStr.value
 })
 
 // Video modal
@@ -488,6 +495,7 @@ const fetchCollaborations = async () => {
 const createNewCollaboration = () => {
   resetForm()
   collaborationModal.isEdit = false
+  originalFormStr.value = JSON.stringify(collaborationForm)
   collaborationModal.visible = true
 }
 
@@ -518,6 +526,7 @@ const viewCollaboration = async (collab) => {
        collaborationForm.videos = generateVideoSections(collaborationForm.numVideos)
     }
 
+    originalFormStr.value = JSON.stringify(collaborationForm)
     collaborationModal.isEdit = true
     collaborationModal.currentCollab = collab
     collaborationModal.visible = true
@@ -543,6 +552,17 @@ const deleteCollaboration = async (collab) => {
       fetchCollaborations()
     } catch(err) { showError('Failed to delete collaboration') }
   }
+}
+
+const attemptCloseModal = async () => {
+  if (isDirty.value) {
+    const confirmed = await showConfirm(
+      'You have unsaved changes. Are you sure you want to exit without saving?',
+      'Exit Without Saving'
+    )
+    if (!confirmed) return
+  }
+  closeCollaborationModal()
 }
 
 const closeCollaborationModal = () => {
@@ -604,6 +624,7 @@ const updateVideoSections = () => {
         hashtags: '',
         draftFile: null,
         draftLink: '',
+        fileId: null,
         invitation: false,
         postLinks: {},
         paid: false,
@@ -623,11 +644,61 @@ const selectVideo = (index) => {
   }
 }
 
-const handleVideoUpload = (event, index) => {
+const handleVideoUpload = async (event, index) => {
   const file = event.target.files[0]
   if (file) {
     collaborationForm.videos[index].draftFile = file
     collaborationForm.videos[index].draftLink = ''
+    collaborationForm.videos[index].fileId = null
+
+    try {
+      showSuccess(`Preparing ${file.name}...`)
+      
+      const ext = file.name.split('.').pop()
+      const collabSlug = (collaborationForm.name || 'untitled').toLowerCase().replace(/\s+/g, '-')
+      const newFileName = `${collabSlug}_video_${index + 1}.${ext}`
+      
+      // Look for identical old filename and purge it to prevent 409 conflict
+      try {
+         const filesRes = await apiGet('/drive/files?folder_path=/Collaboration')
+         if (filesRes && filesRes.files) {
+            const currentFileName = newFileName
+            const existingFile = filesRes.files.find(f => (f.name === currentFileName || f.filename === currentFileName))
+            if (existingFile) {
+               await apiDelete(`/drive/file/${existingFile.id}`)
+               console.log('Purged existing video file:', currentFileName)
+            }
+         }
+      } catch(e) { console.warn('Purge check failed', e) }
+
+      const renamedFile = new File([file], newFileName, { type: file.type })
+      
+      const formData = new FormData()
+      formData.append('file', renamedFile)
+      formData.append('folder_path', '/Collaboration')
+      
+      const uploadRes = await apiPostForm('/drive/upload', formData)
+      
+      if (uploadRes.file?.id) {
+         collaborationForm.videos[index].fileId = uploadRes.file.id
+         const shareRes = await apiPost('/drive/share', {
+            file_id: uploadRes.file.id,
+            access_level: 'public',
+            permission_level: 'viewer',
+            share_type: 'read'
+         })
+         
+         if (shareRes.file?.public_share_link) {
+            collaborationForm.videos[index].draftLink = shareRes.file.public_share_link
+            showSuccess('Video uploaded and public link generated successfully!')
+         } else {
+            showSuccess('Upload complete.')
+         }
+      }
+    } catch (err) {
+      console.error(err)
+      showError('Failed to automatically upload and generate link.')
+    }
   }
 }
 
@@ -650,9 +721,34 @@ const closeVideoModal = () => {
   videoModal.videoUrl = ''
 }
 
-const replaceVideo = (index) => {
-  collaborationForm.videos[index].draftFile = null
-  collaborationForm.videos[index].draftLink = ''
+const replaceVideo = async (index) => {
+  const video = collaborationForm.videos[index]
+  // Purge any existing video with our naming convention to completely wipe old instances
+  try {
+     const collabSlug = (collaborationForm.name || 'untitled').toLowerCase().replace(/\s+/g, '-')
+     const existingPrefix = `${collabSlug}_video_${index + 1}`
+     
+     const filesRes = await apiGet('/drive/files?folder_path=/Collaboration')
+     if (filesRes && filesRes.files) {
+        const matches = filesRes.files.filter(f => {
+           const fname = f.name || f.filename || ''
+           return fname.startsWith(existingPrefix)
+        })
+        for (const match of matches) {
+           await apiDelete(`/drive/file/${match.id || match.file_id}`)
+        }
+     }
+  } catch(e) { console.warn('Silent purge failed', e) }
+
+  if (video.fileId) {
+    try {
+      await apiDelete(`/drive/file/${video.fileId}`)
+    } catch (err) { }
+  }
+  
+  video.draftFile = null
+  video.draftLink = ''
+  video.fileId = null
   selectVideo(index)
 }
 
@@ -698,6 +794,9 @@ const saveCollaboration = async () => {
       await apiPost('/collaboration/collaborations', payload);
       showSuccess('Collaboration created successfully')
     }
+    
+    // Explicitly reset original form string so close doesn't warn
+    originalFormStr.value = JSON.stringify(collaborationForm)
     
     closeCollaborationModal()
     fetchCollaborations()

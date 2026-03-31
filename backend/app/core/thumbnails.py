@@ -19,7 +19,7 @@ def ensure_thumbnail_dir(storage_path):
     return thumbnail_dir
 
 def generate_thumbnail(file_path, file_id):
-    """Generate thumbnail for an image or video file"""
+    """Generate thumbnail for an image, video, or PDF file"""
     try:
         mime_type, _ = mimetypes.guess_type(file_path)
         
@@ -36,12 +36,39 @@ def generate_thumbnail(file_path, file_id):
             
             try:
                 subprocess.run([
-                    'ffmpeg', '-y', '-i', file_path, '-vframes', '1', thumbnail_path
+                    'ffmpeg', '-hwaccel', 'none', '-threads', '1', '-y', '-i', file_path, '-vframes', '1', thumbnail_path
                 ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if os.path.exists(thumbnail_path):
                     return thumbnail_path
             except Exception as e:
                 print(f"Error extracting video frame for {file_path}: {e}")
+
+        # For PDFs, use PyMuPDF to render the first page
+        elif mime_type == 'application/pdf' or file_path.lower().endswith('.pdf'):
+            try:
+                import fitz  # PyMuPDF
+                storage_path = storage_service.get_available_storage_path()
+                thumbnail_dir = ensure_thumbnail_dir(storage_path)
+                thumbnail_filename = f"{file_id}_thumb.jpg"
+                thumbnail_path = os.path.join(thumbnail_dir, thumbnail_filename)
+
+                doc = fitz.open(file_path)
+                if doc.page_count > 0:
+                    page = doc.load_page(0)
+                    # Render at 2x resolution for clarity
+                    mat = fitz.Matrix(2.0, 2.0)
+                    pix = page.get_pixmap(matrix=mat)
+                    img_data = pix.tobytes("jpeg")
+                    
+                    # Resize to thumbnail size with PIL
+                    img = Image.open(BytesIO(img_data))
+                    img.thumbnail((300, 400), Image.LANCZOS)
+                    img.save(thumbnail_path, "JPEG", quality=85)
+                    doc.close()
+                    return thumbnail_path
+                doc.close()
+            except Exception as e:
+                print(f"Error generating PDF thumbnail for {file_path}: {e}")
                 
         return None
             
@@ -49,9 +76,11 @@ def generate_thumbnail(file_path, file_id):
         print(f"Error generating thumbnail for {file_path}: {e}")
         return None
 
-def get_thumbnail_path(file_id):
+def get_thumbnail_path(file_id, encrypted=False):
     """Get thumbnail path for a file"""
     thumbnail_filename = f"{file_id}_thumb.jpg"
+    if encrypted:
+        thumbnail_filename += ".enc"
     
     for storage_path in storage_service.get_all_storage_paths():
         thumbnail_path = os.path.join(storage_path, "thumbnails", thumbnail_filename)
@@ -60,9 +89,11 @@ def get_thumbnail_path(file_id):
     
     return None
 
-def delete_thumbnail(file_id):
+def delete_thumbnail(file_id, encrypted=False):
     """Delete thumbnail for a file"""
     thumbnail_filename = f"{file_id}_thumb.jpg"
+    if encrypted:
+        thumbnail_filename += ".enc"
     
     for storage_path in storage_service.get_all_storage_paths():
         thumbnail_path = os.path.join(storage_path, "thumbnails", thumbnail_filename)

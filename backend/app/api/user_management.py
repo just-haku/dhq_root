@@ -107,6 +107,7 @@ from app.services.email_watcher import email_watcher
 import os
 import uuid
 import shutil
+from app.core.storage import storage_service
 
 class ProfileUpdateRequest(BaseModel):
     display_name: Optional[str] = None
@@ -115,6 +116,7 @@ class ProfileUpdateRequest(BaseModel):
 class AppearanceUpdateRequest(BaseModel):
     active_theme: Optional[str] = None
     side_menu_layout: Optional[str] = None
+    is_single_click_open: Optional[bool] = None
 
 class EmailCredentialsRequest(BaseModel):
     email: str
@@ -146,6 +148,7 @@ async def get_user_profile(current_user: User = Depends(get_current_user)):
         "active_theme": arcade_profile.active_theme,
         "unlocked_themes": arcade_profile.unlocked_themes,
         "side_menu_layout": arcade_profile.side_menu_layout,
+        "is_single_click_open": arcade_profile.is_single_click_open,
         "email_creds": {
             "email": current_user.email_creds.get("email", "") if current_user.email_creds else "",
             "has_password": bool(current_user.email_creds.get("password")) if current_user.email_creds else False
@@ -179,6 +182,9 @@ async def update_appearance(
         if request.side_menu_layout in ('list', 'grid'):
             arcade_profile.side_menu_layout = request.side_menu_layout
             
+    if request.is_single_click_open is not None:
+        arcade_profile.is_single_click_open = request.is_single_click_open
+        
     arcade_profile.save()
     return {
         "message": "Appearance updated successfully",
@@ -208,37 +214,38 @@ async def upload_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Upload and set user avatar"""
-    # Create directory if it doesn't exist
-    upload_dir = "uploads/avatars"
+    """Upload and set user avatar in external storage"""
+    # Use external storage
+    primary_storage = storage_service.storages[0]
+    upload_dir = os.path.join(primary_storage, "avatars")
     os.makedirs(upload_dir, exist_ok=True)
     
-    # Generate unique filename
+    # Validate extension
     extension = os.path.splitext(file.filename)[1].lower()
     if extension not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
         raise HTTPException(status_code=400, detail="Unsupported file format")
     
-    filename = f"{current_user.username}_{uuid.uuid4().hex}{extension}"
+    # Use consistent filename: avatar_userId.ext
+    user_id_str = str(current_user.id)
+    filename = f"avatar_{user_id_str}{extension}"
     file_path = os.path.join(upload_dir, filename)
     
-    # Save file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    # Update user record (external URL path)
-    old_avatar = current_user.avatar_url
-    current_user.avatar_url = f"/api/uploads/avatars/{filename}"
-    current_user.save()
-    
-    # Optional: cleanup old avatar file
-    if old_avatar and old_avatar.startswith("/uploads/"):
-        old_path = old_avatar.lstrip("/")
-        if os.path.exists(old_path):
+    # Cleanup ANY existing avatar files for this user (different extensions)
+    for existing_file in os.listdir(upload_dir):
+        if existing_file.startswith(f"avatar_{user_id_str}."):
             try:
-                os.remove(old_path)
+                os.remove(os.path.join(upload_dir, existing_file))
             except:
                 pass
 
+    # Save new file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update user record
+    current_user.avatar_url = f"/api/uploads/avatars/{filename}"
+    current_user.save()
+    
     return {"message": "Avatar uploaded successfully", "avatar_url": current_user.avatar_url}
 
 @router.post("/banner")
@@ -246,32 +253,33 @@ async def upload_banner(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Upload and set user banner"""
-    upload_dir = "uploads/banners"
+    """Upload and set user banner in external storage"""
+    primary_storage = storage_service.storages[0]
+    upload_dir = os.path.join(primary_storage, "banners")
     os.makedirs(upload_dir, exist_ok=True)
     
     extension = os.path.splitext(file.filename)[1].lower()
     if extension not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
         raise HTTPException(status_code=400, detail="Unsupported file format")
     
-    filename = f"{current_user.username}_{uuid.uuid4().hex}{extension}"
+    user_id_str = str(current_user.id)
+    filename = f"banner_{user_id_str}{extension}"
     file_path = os.path.join(upload_dir, filename)
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    old_banner = current_user.banner_url
-    current_user.banner_url = f"/api/uploads/banners/{filename}"
-    current_user.save()
-    
-    if old_banner and old_banner.startswith("/uploads/"):
-        old_path = old_banner.lstrip("/")
-        if os.path.exists(old_path):
+    # Cleanup existing banner files
+    for existing_file in os.listdir(upload_dir):
+        if existing_file.startswith(f"banner_{user_id_str}."):
             try:
-                os.remove(old_path)
+                os.remove(os.path.join(upload_dir, existing_file))
             except:
                 pass
 
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    current_user.banner_url = f"/api/uploads/banners/{filename}"
+    current_user.save()
+    
     return {"message": "Banner uploaded successfully", "banner_url": current_user.banner_url}
 
 @router.get("/list")
@@ -289,19 +297,23 @@ async def get_users_list(current_user: User = Depends(get_current_user)):
 
 @router.post("/avatar/reset")
 async def reset_avatar(current_user: User = Depends(get_current_user)):
-    """Reset user avatar to default (None)"""
+    """Reset user avatar to default (None) and cleanup storage"""
     old_avatar = current_user.avatar_url
     current_user.avatar_url = None
     current_user.save()
     
-    # Optional cleanup
-    if old_avatar and old_avatar.startswith("/uploads/"):
-        old_path = old_avatar.lstrip("/")
-        if os.path.exists(old_path):
-            try:
-                os.remove(old_path)
-            except:
-                pass
+    # Use external storage for cleanup
+    primary_storage = storage_service.storages[0]
+    avatar_dir = os.path.join(primary_storage, "avatars")
+    
+    if os.path.exists(avatar_dir):
+        user_id_str = str(current_user.id)
+        for existing_file in os.listdir(avatar_dir):
+            if existing_file.startswith(f"avatar_{user_id_str}."):
+                try:
+                    os.remove(os.path.join(avatar_dir, existing_file))
+                except:
+                    pass
                 
     return {"message": "Avatar reset successfully", "avatar_url": None}
 

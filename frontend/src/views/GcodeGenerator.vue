@@ -1,5 +1,5 @@
 <template>
-  <div class="gcode-generator">
+  <div class="gcode-generator" v-if="systemStore.powerMode !== 'power_saver'">
     <!-- Header -->
     <div class="page-header">
       <div class="header-text">
@@ -472,11 +472,22 @@
       </div>
     </div>
   </div>
+
+  <div class="gcode-generator-disabled" v-else>
+    <div class="disabled-message glass-panel">
+      <i class="fas fa-bolt pulse-alert" style="font-size: 4rem; color: #f59e0b; margin-bottom: 1rem;"></i>
+      <h2>G-code Generator Disabled</h2>
+      <p>The G-code generator and toolpath emulator requires significant processing power and has been temporarily disabled to conserve energy during Power Saver mode.</p>
+    </div>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { apiPost, apiPostForm } from '../utils/api.js'
+import { useSystemStore } from '@/stores/systemStore.js'
+
+const systemStore = useSystemStore()
 
 // --- State ---
 const fileInput = ref(null)
@@ -1408,10 +1419,43 @@ const showToast = (message, type = 'success') => {
 .settings-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  padding: 10px;
 }
 
-@media (max-width: 900px) { .settings-row { grid-template-columns: 1fr; } }
+.gcode-generator-disabled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 100px);
+  padding: 2rem;
+}
+
+.disabled-message {
+  text-align: center;
+  padding: 3rem;
+  max-width: 600px;
+  border-radius: 1rem;
+  background: var(--glass-bg-primary);
+  border: 1px solid var(--glass-border);
+}
+
+.disabled-message h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.disabled-message p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 1024px) {
+  .preview-row, .settings-row {
+    flex-direction: column;
+  }
+}
 
 .settings-card {
   padding: 1rem 1.25rem;

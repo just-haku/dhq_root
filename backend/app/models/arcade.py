@@ -210,6 +210,7 @@ class UserArcadeProfile(Document):
     unlocked_themes = ListField(StringField(), default=['dark', 'light'])
     side_menu_layout = StringField(choices=['list', 'grid'], default='list')
     active_theme = StringField(default='dark')
+    is_single_click_open = BooleanField(default=False)
     
     # Streaks and counters
     login_streak = IntField(default=0)
@@ -337,6 +338,7 @@ class UserArcadeProfile(Document):
             'active_theme': self.active_theme,
             'unlocked_themes': self.unlocked_themes,
             'side_menu_layout': self.side_menu_layout,
+            'is_single_click_open': self.is_single_click_open,
             'login_streak': self.login_streak,
             'tasks_completed': self.tasks_completed,
             'collaborations_created': self.collaborations_created,

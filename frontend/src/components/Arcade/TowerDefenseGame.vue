@@ -143,11 +143,34 @@ const mapImg = new Image(); mapImg.src = '/assets/arcade/td_map_1.png'
 const towerImg = new Image(); towerImg.src = '/assets/arcade/td_towers.png'
 const enemyImg = new Image(); enemyImg.src = '/assets/arcade/td_enemies.png'
 
-// Map Nodes (Grass Map)
+// Map Nodes (Grid Aligned - 40x40 cells, centers are at 20, 60, 100...)
 const nodes = [
-  { x: 0, y: 50 }, { x: 235, y: 215 }, { x: 500, y: 115 }, { x: 745, y: 255 },
-  { x: 135, y: 590 }, { x: 500, y: 500 }, { x: 700, y: 550 }, { x: 800, y: 550 }
+  { x: -20, y: 100 },  // Spawn left
+  { x: 300, y: 100 },  // Right 8 cells
+  { x: 300, y: 340 },  // Down 6 cells
+  { x: 620, y: 340 },  // Right 8 cells
+  { x: 620, y: 500 },  // Down 4 cells
+  { x: 140, y: 500 },  // Left 12 cells
+  { x: 140, y: 220 },  // Up 7 cells
+  { x: 500, y: 220 },  // Right 9 cells
+  { x: 500, y: -20 }   // Up out of top
 ]
+
+// Compute discrete path cells for grid drawing and tower placement validation
+const pathCells = new Set()
+const buildPathCells = () => {
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const start = nodes[i]; const end = nodes[i+1]
+    let x1 = Math.floor(start.x / 40); let y1 = Math.floor(start.y / 40)
+    let x2 = Math.floor(end.x / 40);   let y2 = Math.floor(end.y / 40)
+    if (x1 === x2) {
+      for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) pathCells.add(`${x1},${y}`)
+    } else {
+      for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) pathCells.add(`${x},${y1}`)
+    }
+  }
+}
+buildPathCells()
 
 const selectTowerType = (type) => {
   if (money.value < type.cost) return
@@ -170,12 +193,19 @@ const handleCanvasMove = (e) => {
 }
 
 const handleCanvasClick = (e) => {
-  if (!selectedType.value) return
+  if (!selectedType.value || !ghostPos.value) return
   const type = towerTypes.find(t => t.id === selectedType.value)
   if (money.value < type.cost) return
 
-  // Check collision with path or other towers
-  // Simplified for now: just place
+  const cellX = ghostPos.value.x / gridSize
+  const cellY = ghostPos.value.y / gridSize
+
+  // Check collision with path
+  if (pathCells.has(`${cellX},${cellY}`)) return
+  
+  // Check collision with other towers
+  if (towers.some(t => t.x - gridSize/2 === ghostPos.value.x && t.y - gridSize/2 === ghostPos.value.y)) return
+
   towers.push({
     x: ghostPos.value.x + gridSize/2,
     y: ghostPos.value.y + gridSize/2,
@@ -365,15 +395,29 @@ const endGame = async (won) => {
   }
 }
 
+const drawMapTiles = () => {
+  bgCtx.clearRect(0,0,800,600)
+  for (let y = 0; y < 15; y++) {
+    for (let x = 0; x < 20; x++) {
+      if (pathCells.has(`${x},${y}`)) {
+        bgCtx.fillStyle = '#d4a373' // Path brown
+      } else {
+        bgCtx.fillStyle = '#4d7c0f' // Grass green
+      }
+      bgCtx.fillRect(x*gridSize, y*gridSize, gridSize, gridSize)
+      
+      // Grid lines
+      bgCtx.strokeStyle = 'rgba(255,255,255,0.05)'
+      bgCtx.strokeRect(x*gridSize, y*gridSize, gridSize, gridSize)
+    }
+  }
+}
+
 onMounted(() => {
   ctx = gameCanvas.value.getContext('2d')
   bgCtx = bgCanvas.value.getContext('2d')
   
-  mapImg.onload = () => {
-    bgCtx.drawImage(mapImg, 0, 0, 800, 600)
-  }
-  if (mapImg.complete) bgCtx.drawImage(mapImg, 0, 0, 800, 600)
-  
+  drawMapTiles()
   draw()
 })
 

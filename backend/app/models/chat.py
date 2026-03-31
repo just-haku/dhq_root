@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, DateTimeField, ReferenceField, ListField, BooleanField, IntField, EmbeddedDocumentField
+from mongoengine import Document, StringField, DateTimeField, ReferenceField, ListField, BooleanField, IntField, EmbeddedDocumentField, BinaryField
 from datetime import datetime
 from .user import User
 
@@ -166,3 +166,38 @@ class PrivateMessage(Document):
             result['read_at'] = self.read_at.isoformat()
             
         return result
+
+class AIChatSession(Document):
+    user = ReferenceField(User, required=True)
+    title = StringField(max_length=255, required=True)
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'ai_chat_sessions',
+        'indexes': ['user']
+    }
+
+class AIChatMessage(Document):
+    session = ReferenceField(AIChatSession, required=True, reverse_delete_rule=2)
+    role = StringField(choices=('user', 'assistant', 'system', 'tool'), required=True)
+    content = StringField(required=True)
+    timestamp = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'ai_chat_messages',
+        'indexes': ['session']
+    }
+
+class UserAPIKey(Document):
+    user = ReferenceField(User, required=True)
+    provider_name = StringField(required=True) # e.g. openai, anthropic, deepseek, civitai
+    encrypted_key = BinaryField(required=True)
+    created_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'user_api_keys',
+        'indexes': [
+            {'fields': ['user', 'provider_name'], 'unique': True}
+        ]
+    }

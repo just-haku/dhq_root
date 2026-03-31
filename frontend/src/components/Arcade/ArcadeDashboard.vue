@@ -20,7 +20,8 @@
         <!-- Admin Only Tabs -->
         <template v-if="isOP">
           <div class="nav-divider">Admin</div>
-          <button @click="$router.push('/arcade/manage')"
+          <button @click="activeTab = 'manage'"
+                  :class="{ active: activeTab === 'manage' }"
                   class="nav-item admin-item">
             <i class="fas fa-tools"></i>
             <span>Management</span>
@@ -80,7 +81,34 @@
                 <p>{{ game.description }}</p>
                 <div class="game-meta">
                   <span class="difficulty" :class="game.difficulty.toLowerCase()">{{ game.difficulty }}</span>
-                  <span class="reward"><i class="fas fa-coins"></i> {{ game.reward }}</span>
+                  <span class="reward">
+                    <i v-if="game.isMaintenance" class="fas fa-wrench" style="color: #f59e0b;"></i>
+                    <span v-if="game.isMaintenance" style="color: #f59e0b; margin-left: 5px;">MAINTENANCE</span>
+                    <template v-else><i class="fas fa-coins"></i> {{ game.reward }}</template>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arcade Management -->
+        <div v-if="activeTab === 'manage' && isOP" class="admin-manage-view">
+          <div class="glass-panel" style="padding: 2rem;">
+            <h2><i class="fas fa-tools text-primary"></i> Arcade Maintenance Controls</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Toggle game availability across the platform. OP can always override and debug games.</p>
+            
+            <div class="maintenance-grid">
+              <div v-for="game in allGames" :key="'m_'+game.id" class="maint-card glass-panel flex-row">
+                <div class="maint-info">
+                  <h3><i :class="game.icon" :style="{ color: game.color }"></i> {{ game.name }}</h3>
+                </div>
+                <div class="maint-actions">
+                   <button class="btn-toggle" 
+                           :class="{ 'maint-active': game.isMaintenance }" 
+                           @click="toggleMaintenance(game)">
+                     {{ game.isMaintenance ? 'UNDER MAINTENANCE' : 'ACTIVE' }}
+                   </button>
                 </div>
               </div>
             </div>
@@ -168,22 +196,30 @@ const updateTheme = () => {
 }
 
 // Games Data
+const maintStates = JSON.parse(localStorage.getItem('dhq-arcade-maintenance') || '{}')
+
 const allGames = ref([
-  { id: 'wordle', name: 'Wordle', description: 'Guess the hidden 5-letter word in 6 tries.', icon: 'fas fa-font', component: markRaw(WordleGame), difficulty: 'Medium', reward: '25-125 KPI', color: '#6aaa64', imageLoaded: true },
-  { id: 'tictactoe', name: 'Tic Tac Toe', description: 'Classic 3x3 grid game against AI.', icon: 'fas fa-times', component: markRaw(TicTacToeGame), difficulty: 'Easy', reward: '10-50 KPI', color: '#3b82f6', imageLoaded: true },
-  { id: 'bovo', name: 'Bovo (Five in a Row)', description: 'Connect five stones in a row to win.', icon: 'fas fa-circle', component: markRaw(BovoGame), difficulty: 'Hard', reward: '100 KPI', color: '#8b5cf6', imageLoaded: true },
-  { id: 'blackjack', name: 'Blackjack', description: 'Beat the dealer without going over 21.', icon: 'fas fa-spade', component: markRaw(BlackjackGame), difficulty: 'Medium', reward: 'CHIPS', color: '#ef4444', imageLoaded: true },
-  { id: 'bigtwo', name: 'Big Two', description: 'Be the first to empty your hand.', icon: 'fas fa-cards', component: markRaw(BigTwoGame), difficulty: 'Hard', reward: 'CHIPS', color: '#f59e0b', imageLoaded: true },
-  { id: '2048', name: '2048', description: 'Merge tiles to reach the 2048 tile.', icon: 'fas fa-th-large', component: markRaw(Game2048), difficulty: 'Medium', reward: '80 KPI', color: '#edc22e', imageLoaded: true },
-  { id: 'wordsearch', name: 'Word Search', description: 'Find hidden words in the grid.', icon: 'fas fa-search', component: markRaw(WordSearchGame), difficulty: 'Medium', reward: '40 KPI', color: '#10b981', imageLoaded: true },
-  { id: 'doodlejump', name: 'Doodle Jump', description: 'Jump as high as you can!', icon: 'fas fa-arrow-up', component: markRaw(DoodleJumpGame), difficulty: 'Medium', reward: '70 KPI', color: '#ec4899', imageLoaded: true },
-  { id: 'flappybird', name: 'Flappy Bird', description: 'Tap to fly through pipes!', icon: 'fas fa-dove', component: markRaw(FlappyBirdGame), difficulty: 'Hard', reward: '90 KPI', color: '#7dd3fc', imageLoaded: true },
-  { id: 'snake', name: 'Neon Snake', description: 'Classic snake with a neon twist.', icon: 'fas fa-worm', component: markRaw(defineAsyncComponent(() => import('./SnakeGame.vue'))), difficulty: 'Medium', reward: '20-100 KPI', color: '#3b82f6', imageLoaded: false },
-  { id: 'minesweeper', name: 'Minesweeper', description: 'Clear the grid without hitting mines.', icon: 'fas fa-bomb', component: markRaw(defineAsyncComponent(() => import('./MinesweeperGame.vue'))), difficulty: 'Hard', reward: '50-150 KPI', color: '#f43f5e', imageLoaded: false },
-  { id: 'colorsorter', name: 'Color Sorter', description: 'Sort the colored liquids into tubes.', icon: 'fas fa-vial', component: markRaw(defineAsyncComponent(() => import('./ColorSorterGame.vue'))), difficulty: 'Medium', reward: '50 KPI', color: '#10b981', imageLoaded: false },
-  { id: 'towerdefense', name: 'Tower Defense', description: 'Protect your base from waves of enemies.', icon: 'fa-fort-awesome', component: markRaw(defineAsyncComponent(() => import('./TowerDefenseGame.vue'))), difficulty: 'Extreme', reward: '100-500 KPI', color: '#fbbf24', imageLoaded: false },
-  { id: 'platformer', name: 'Platformer Arena', description: 'Action-packed platformer wave survival.', icon: 'fas fa-gamepad', component: markRaw(defineAsyncComponent(() => import('./PlatformerGame.vue'))), difficulty: 'Hard', reward: '200 KPI', color: '#a855f7', imageLoaded: false },
+  { id: 'wordle', name: 'Wordle', description: 'Guess the hidden 5-letter word in 6 tries.', icon: 'fas fa-font', component: markRaw(WordleGame), difficulty: 'Medium', reward: '25-125 KPI', color: '#6aaa64', imageLoaded: true, isMaintenance: !!maintStates['wordle'] },
+  { id: 'tictactoe', name: 'Tic Tac Toe', description: 'Classic 3x3 grid game against AI.', icon: 'fas fa-times', component: markRaw(TicTacToeGame), difficulty: 'Easy', reward: '10-50 KPI', color: '#3b82f6', imageLoaded: true, isMaintenance: !!maintStates['tictactoe'] },
+  { id: 'bovo', name: 'Bovo (Five in a Row)', description: 'Connect five stones in a row to win.', icon: 'fas fa-circle', component: markRaw(BovoGame), difficulty: 'Hard', reward: '100 KPI', color: '#8b5cf6', imageLoaded: true, isMaintenance: !!maintStates['bovo'] },
+  { id: 'blackjack', name: 'Blackjack', description: 'Beat the dealer without going over 21.', icon: 'fas fa-spade', component: markRaw(BlackjackGame), difficulty: 'Medium', reward: 'CHIPS', color: '#ef4444', imageLoaded: true, isMaintenance: !!maintStates['blackjack'] },
+  { id: 'bigtwo', name: 'Big Two', description: 'Be the first to empty your hand.', icon: 'fas fa-cards', component: markRaw(BigTwoGame), difficulty: 'Hard', reward: 'CHIPS', color: '#f59e0b', imageLoaded: true, isMaintenance: !!maintStates['bigtwo'] },
+  { id: '2048', name: '2048', description: 'Merge tiles to reach the 2048 tile.', icon: 'fas fa-th-large', component: markRaw(Game2048), difficulty: 'Medium', reward: '80 KPI', color: '#edc22e', imageLoaded: true, isMaintenance: !!maintStates['2048'] },
+  { id: 'wordsearch', name: 'Word Search', description: 'Find hidden words in the grid.', icon: 'fas fa-search', component: markRaw(WordSearchGame), difficulty: 'Medium', reward: '40 KPI', color: '#10b981', imageLoaded: true, isMaintenance: !!maintStates['wordsearch'] },
+  { id: 'doodlejump', name: 'Doodle Jump', description: 'Jump as high as you can!', icon: 'fas fa-arrow-up', component: markRaw(DoodleJumpGame), difficulty: 'Medium', reward: '70 KPI', color: '#ec4899', imageLoaded: true, isMaintenance: !!maintStates['doodlejump'] },
+  { id: 'flappybird', name: 'Flappy Bird', description: 'Tap to fly through pipes!', icon: 'fas fa-dove', component: markRaw(FlappyBirdGame), difficulty: 'Hard', reward: '90 KPI', color: '#7dd3fc', imageLoaded: true, isMaintenance: !!maintStates['flappybird'] },
+  { id: 'snake', name: 'Neon Snake', description: 'Classic snake with a neon twist.', icon: 'fas fa-worm', component: markRaw(defineAsyncComponent(() => import('./SnakeGame.vue'))), difficulty: 'Medium', reward: '20-100 KPI', color: '#3b82f6', imageLoaded: false, isMaintenance: !!maintStates['snake'] },
+  { id: 'minesweeper', name: 'Minesweeper', description: 'Clear the grid without hitting mines.', icon: 'fas fa-bomb', component: markRaw(defineAsyncComponent(() => import('./MinesweeperGame.vue'))), difficulty: 'Hard', reward: '50-150 KPI', color: '#f43f5e', imageLoaded: false, isMaintenance: !!maintStates['minesweeper'] },
+  { id: 'colorsorter', name: 'Color Sorter', description: 'Sort the colored liquids into tubes.', icon: 'fas fa-vial', component: markRaw(defineAsyncComponent(() => import('./ColorSorterGame.vue'))), difficulty: 'Medium', reward: '50 KPI', color: '#10b981', imageLoaded: false, isMaintenance: !!maintStates['colorsorter'] },
+  { id: 'towerdefense', name: 'Tower Defense', description: 'Protect your base from waves of enemies.', icon: 'fa-fort-awesome', component: markRaw(defineAsyncComponent(() => import('./TowerDefenseGame.vue'))), difficulty: 'Extreme', reward: '100-500 KPI', color: '#fbbf24', imageLoaded: false, isMaintenance: !!maintStates['towerdefense'] },
+  { id: 'platformer', name: 'Platformer Arena', description: 'Action-packed platformer wave survival.', icon: 'fas fa-gamepad', component: markRaw(defineAsyncComponent(() => import('./PlatformerGame.vue'))), difficulty: 'Hard', reward: '200 KPI', color: '#a855f7', imageLoaded: false, isMaintenance: !!maintStates['platformer'] },
 ])
+
+const toggleMaintenance = (game) => {
+  game.isMaintenance = !game.isMaintenance
+  maintStates[game.id] = game.isMaintenance
+  localStorage.setItem('dhq-arcade-maintenance', JSON.stringify(maintStates))
+}
 
 const activeGame = ref(null)
 const dailyClaimed = ref(false)
@@ -204,9 +240,20 @@ const claimDailyBonus = () => {
 
 const startGame = (game) => {
   if (game.placeholder) {
-    alert('This game is coming soon!')
+    showAlert('Coming Soon', 'This game is coming soon!', 'info')
     return
   }
+  
+  if (game.isMaintenance) {
+    if (!isOP.value) {
+      showAlert('Maintenance', 'This game is currently undergoing maintenance. Please check back later.', 'warning')
+      return
+    } else {
+      const dbg = confirm(`[ADMIN] ${game.name} is in Maintenance mode. Proceed to debug?`)
+      if (!dbg) return
+    }
+  }
+  
   activeGame.value = game
 }
 
@@ -599,6 +646,54 @@ onMounted(() => {
   font-size: 4rem;
   margin-bottom: 2rem;
   color: var(--text-muted);
+}
+
+.maintenance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.maint-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+}
+
+.maint-info h3 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.btn-toggle {
+  padding: 0.5rem 1rem;
+  border-radius: 50px;
+  border: 1px solid var(--primary-color);
+  background: transparent;
+  color: var(--primary-color);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.8rem;
+}
+
+.btn-toggle:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.btn-toggle.maint-active {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.btn-toggle.maint-active:hover {
+  background: rgba(245, 158, 11, 0.3);
 }
 
 /* Transitions */

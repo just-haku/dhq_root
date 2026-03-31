@@ -1,0 +1,56 @@
+{
+    "sidebar": {
+        "dashboard": "Bảng Điều Khiển",
+        "drive": "Lưu Trữ",
+        "email": "Hộp Thư",
+        "chat": "Phòng Trò Chuyện",
+        "collaboration": "Cộng Tác Hiện Thực",
+        "cnc": "Lập Trình CNC",
+        "arcade": "Khu Trò Chơi",
+        "admin": "Quản Trị Hệ Thống",
+        "performance": "Hiệu Suất Máy Chủ",
+        "settings": "Cài Đặt Cá Nhân",
+        "users": "Quản Lý Người Dùng",
+        "database": "Hồ Sơ Dữ Liệu",
+        "kpi_ledger": "Sổ Cái KPI",
+        "store_orders": "Đơn Hàng Shop",
+        "game_scores": "Điểm Số Trò Chơi",
+        "admin_config": "Quản Lý Cài Đặt",
+        "order_center": "Khu Vực Đơn Hàng",
+        "task_center": "Nhiệm Vụ Cơ Sở",
+        "shop": "Cửa Hàng",
+        "notification_center": "Trung Tâm Thông Báo",
+        "personalize": "Cá Nhân Hóa",
+        "scan_virus": "Diệt Virus",
+        "daily_gift": "Quà Tặng Hàng Ngày",
+        "panic_mode": "Chế Độ Khẩn Cấp",
+        "manage_role": "Quản Lý Vai Trò",
+        "vault": "Kho Tiền",
+        "manage_quotas": "Quản Lý Hạn Mức",
+        "nuke_data": "Xóa Sạch Dữ Liệu",
+        "manage_shop": "Quản Lý Cửa Hàng",
+        "working_mode": "Chế Độ Hoạt Động",
+        "manage_gifts": "Quản Lý Quà Tặng"
+    },
+    "settings": {
+        "theme": "Giao Diện",
+        "language": "Ngôn Ngữ",
+        "logout": "Đăng Xuất",
+        "profile": "Hồ Sơ"
+    },
+    "common": {
+        "save": "Lưu",
+        "cancel": "Hủy",
+        "delete": "Xóa",
+        "edit": "Chỉnh Sửa",
+        "loading": "Đang Tải...",
+        "success": "Thành Công",
+        "error": "Lỗi"
+    },
+    "power_saver": {
+        "normal": "Chế Độ Bình Thường",
+        "powersaver": "Chế Độ Tiết Kiệm Pin",
+        "active": "Kích Hoạt",
+        "banner": "HỆ THỐNG ĐANG HOẠT ĐỘNG Ở TRẠNG THÁI TIẾT KIỆM NĂNG LƯỢNG"
+    }
+}

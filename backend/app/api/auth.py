@@ -159,3 +159,7 @@ async def get_current_user_optional(
         return user
     except Exception:
         return None
+
+async def get_language(accept_language: str = Header("en")) -> str:
+    """Extract language from Accept-Language header"""
+    return accept_language.split(',')[0].split('-')[0].lower()

@@ -63,6 +63,12 @@ const routes = [
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
+        path: '/operator/working-mode',
+        name: 'OperatorWorkingMode',
+        component: () => import('../views/Operator/WorkingMode.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+      },
+      {
         path: '/media-gallery',
         name: 'MediaGallery',
         component: () => import('../views/MediaGallery.vue'),
@@ -108,6 +114,12 @@ const routes = [
         path: '/admin/system',
         name: 'AdminSystem',
         component: () => import('../views/AdminSystem.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+      },
+      {
+        path: '/admin/panic',
+        name: 'PanicMode',
+        component: () => import('../views/Admin/PanicMode.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
@@ -549,6 +561,12 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
+        path: '/vault',
+        name: 'Vault',
+        component: () => import('../views/Vault.vue'),
+        meta: { requiresAuth: true, requiresOp: true }
+      },
+      {
         path: '/collaboration',
         name: 'Collaboration',
         component: () => import('../views/Collaboration.vue'),
@@ -607,6 +625,28 @@ const routes = [
     ]
   },
   {
+    path: '/s/:hash',
+    name: 'PublicShare',
+    component: () => import('@/views/PublicView.vue')
+  },
+  {
+    path: '/s/:hash/view',
+    name: 'PublicFileView',
+    component: () => import('@/views/EmbedView.vue')
+  },
+  {
+    path: '/:id',
+    name: 'ShortLinkRedirect',
+    redirect: to => {
+      const id = to.params.id;
+      const protectedRoutes = ['login', 'register', 'drive', 'vault', 'shop', 'profile', 'settings', 'admin', 's'];
+      if (protectedRoutes.includes(id)) {
+        return { name: id };
+      }
+      return { path: `/s/${id}` };
+    }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: Funny404
@@ -631,6 +671,8 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated) {
     next('/')
   } else if (to.meta.requiresAdmin && !['AD', 'OP'].includes(userRole)) {
+    next('/')
+  } else if (to.meta.requiresOp && userRole !== 'OP') {
     next('/')
   } else if (to.path === '/shadow-garden/login' && isAuthenticated) {
     // Already logged in, go to dashboard

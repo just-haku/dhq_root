@@ -1,1038 +1,768 @@
 <template>
-  <div class="advanced-clock-container" :data-theme="theme">
-    <!-- Background Layer -->
-    <div id="background-layer" :style="backgroundStyle"></div>
-    
-    <!-- Alignment Grid -->
-    <div id="alignment-grid" v-show="showGrid">
-      <div class="grid-line v-mid"></div>
-      <div class="grid-line h-mid"></div>
-    </div>
+  <div class="advanced-clock-container" @mousemove="onDrag" @mouseup="stopDrag" @mouseleave="stopDrag">
+    <!-- Background image overlay -->
+    <div id="bg-overlay" :style="overlayStyle"></div>
 
-    <!-- Clock Container -->
-    <div id="clock-container" :style="clockStyle" @mousedown="startDrag">
-      <div class="chunk" id="hours" :style="digitStyle('hours')">{{ displayHours }}</div>
-      <div class="chunk sep" id="sep1" :style="digitStyle('separator')">:</div>
-      <div class="chunk" id="minutes" :style="digitStyle('minutes')">{{ displayMinutes }}</div>
-      <div class="chunk sep" id="sep2" :style="digitStyle('separator')">:</div>
-      <div class="chunk" id="seconds" :style="digitStyle('seconds')">{{ displaySeconds }}</div>
-    </div>
-
-    <!-- Date Display -->
-    <div id="date-display" class="draggable-ui" :style="dateStyle" v-show="showDate">
-      {{ currentDate }}
-    </div>
-
-    <!-- Control Buttons -->
-    <div class="top-controls" v-show="showControls">
-      <button @click="toggleTimer" :title="timerMode ? 'Start Timer' : 'Start Stopwatch'" class="control-btn">
-        <i :class="timerMode ? 'fas fa-play' : 'fas fa-stopwatch'"></i>
-      </button>
-      <button @click="pauseTimer" title="Pause" class="control-btn">
-        <i class="fas fa-pause"></i>
-      </button>
-      <button @click="resetTimer" title="Reset" class="control-btn">
-        <i class="fas fa-undo"></i>
-      </button>
-    </div>
-    
-    <!-- Settings Button -->
-    <button id="settings-button" @click="toggleSettings" title="Settings" class="settings-btn">
-      <i class="fas fa-cog"></i>
-    </button>
-
-    <!-- Settings Panel -->
-    <div id="settings-panel" v-show="showSettings" class="settings-panel">
-      <div class="settings-tabs main-tabs">
-        <button 
-          v-for="tab in tabs" 
-          :key="tab.id"
-          @click="activeTab = tab.id"
-          :class="['tab-button', { active: activeTab === tab.id }]"
-          :title="tab.name"
-        >
-          <i :class="tab.icon"></i>
+    <!-- Clock Stage -->
+    <div id="stage" :style="stageStyle">
+      <!-- Top controls if timer mode -->
+      <div class="top-controls" v-if="state.clockMode !== 'clock' && state.showControls">
+        <button @click="toggleTimer" :title="state.isRunning ? 'Pause' : 'Start'" class="control-btn top-btn">
+          <span v-if="state.isRunning">⏸️</span>
+          <span v-else>▶️</span>
+        </button>
+        <button @click="resetTimer" title="Reset" class="control-btn top-btn">
+          <span>🔄</span>
         </button>
       </div>
 
-      <!-- Mode Tab -->
-      <div class="tab-content" v-show="activeTab === 'mode-tab'">
-        <h3>Mode & Timing</h3>
-        <label>Mode</label>
-        <select v-model="clockMode" @change="onModeChange" class="form-control">
-          <option value="clock">Clock (Realtime)</option>
-          <option value="timer">Timer</option>
-          <option value="stopwatch">Stopwatch</option>
-        </select>
+      <div id="clock-face" @mousedown="startDrag">
+        <div class="digit-cell" :class="{ flip: flipState[0] }">
+          <img v-if="state.useImgDigits && state.imgDigits[digits[0]]" :src="state.imgDigits[digits[0]]" />
+          <span v-else :style="digitStyle">{{ digits[0] }}</span>
+        </div>
+        <div class="digit-cell" :class="{ flip: flipState[1] }">
+          <img v-if="state.useImgDigits && state.imgDigits[digits[1]]" :src="state.imgDigits[digits[1]]" />
+          <span v-else :style="digitStyle">{{ digits[1] }}</span>
+        </div>
+        <div class="colon" :style="digitStyle">:</div>
+        <div class="digit-cell" :class="{ flip: flipState[2] }">
+          <img v-if="state.useImgDigits && state.imgDigits[digits[2]]" :src="state.imgDigits[digits[2]]" />
+          <span v-else :style="digitStyle">{{ digits[2] }}</span>
+        </div>
+        <div class="digit-cell" :class="{ flip: flipState[3] }">
+          <img v-if="state.useImgDigits && state.imgDigits[digits[3]]" :src="state.imgDigits[digits[3]]" />
+          <span v-else :style="digitStyle">{{ digits[3] }}</span>
+        </div>
+        <div class="colon" :style="digitStyle">:</div>
+        <div class="digit-cell" :class="{ flip: flipState[4] }">
+          <img v-if="state.useImgDigits && state.imgDigits[digits[4]]" :src="state.imgDigits[digits[4]]" />
+          <span v-else :style="digitStyle">{{ digits[4] }}</span>
+        </div>
+        <div class="digit-cell" :class="{ flip: flipState[5] }">
+          <img v-if="state.useImgDigits && state.imgDigits[digits[5]]" :src="state.imgDigits[digits[5]]" />
+          <span v-else :style="digitStyle">{{ digits[5] }}</span>
+        </div>
+      </div>
+      <div id="date-line" v-show="state.showDate">{{ currentDate }}</div>
+    </div>
 
-        <div v-show="clockMode === 'timer'" class="timer-settings">
-          <label>Duration (Seconds)</label>
-          <div class="d-flex gap-2">
-            <input type="number" v-model="timerDuration" min="0" class="form-control">
-            <button @click="setTimer" class="btn btn-secondary">Set</button>
-          </div>
+    <!-- Settings toggler -->
+    <button id="settings-button" @click="toggleSettings" title="Settings" class="settings-btn" style="position: absolute; right: 20px; top: 20px; z-index: 100;">
+      ⚙️
+    </button>
+
+    <!-- Controls Panel -->
+    <div id="controls" v-show="showSettings">
+      <!-- Tab Bar -->
+      <div id="tab-bar">
+        <button class="tab-btn" :class="{active: activeTab === 'tab-bg'}" @click="activeTab = 'tab-bg'">🎨 Background</button>
+        <button class="tab-btn" :class="{active: activeTab === 'tab-digits'}" @click="activeTab = 'tab-digits'">🔢 Digits</button>
+        <button class="tab-btn" :class="{active: activeTab === 'tab-img-digits'}" @click="activeTab = 'tab-img-digits'">🖼️ Custom</button>
+        <button class="tab-btn" :class="{active: activeTab === 'tab-mode'}" @click="activeTab = 'tab-mode'">⚙️ Mode</button>
+      </div>
+
+      <!-- ── TAB: BACKGROUND ── -->
+      <div class="tab-panel" :class="{active: activeTab === 'tab-bg'}">
+        <div class="section-title">Gradient Presets</div>
+        <div class="swatch-grid" id="gradient-swatches">
+           <div v-for="(grad, i) in GRADIENTS" :key="i"
+                class="swatch" :class="{active: state.bgMode === 'gradient' && state.bgGradient === grad.g}"
+                :style="{background: grad.g}" :title="grad.label"
+                @click="setGradient(grad)"></div>
         </div>
 
-        <label>Speed Multiplier (x)</label>
-        <input type="number" v-model="speedMultiplier" min="0.1" step="0.1" class="form-control">
-
-        <div class="form-check mt-2">
-          <input type="checkbox" v-model="showDate" id="date-display-toggle" class="form-check-input">
-          <label for="date-display-toggle" class="form-check-label">Show Date</label>
+        <div class="section-title">Solid Color</div>
+        <div class="color-row">
+          <label>Pick any background color</label>
+          <input type="color" v-model="state.bgColor" @input="state.bgMode = 'solid'" />
         </div>
-        
-        <div class="controls mt-3 d-flex gap-2">
-          <button @click="startClock" class="btn btn-primary w-100">Start</button>
-          <button @click="pauseClock" class="btn btn-secondary w-100">Pause</button>
-          <button @click="resetClock" class="btn btn-danger w-100">Reset</button>
+
+        <div class="section-title">Background Image</div>
+        <label class="upload-btn">
+          📁 Upload Image
+          <input type="file" accept="image/*" @change="handleBgUpload" style="display:none" />
+        </label>
+        <div class="slider-row">
+          <label>Blur</label>
+          <input type="range" v-model="state.bgBlur" min="0" max="20" step="0.5" />
+          <span id="blur-val">{{state.bgBlur}}px</span>
+        </div>
+        <div class="slider-row">
+          <label>Overlay</label>
+          <input type="range" v-model="state.bgDarken" min="0" max="0.9" step="0.05" />
+          <span id="opacity-val">{{Math.round(state.bgDarken*100)}}%</span>
+        </div>
+        <p class="info-row">Upload a photo as background. Use blur & overlay to keep the clock readable.</p>
+      </div>
+
+      <!-- ── TAB: DIGITS STYLE ── -->
+      <div class="tab-panel" :class="{active: activeTab === 'tab-digits'}">
+        <div class="section-title">Font Style</div>
+        <div class="digit-grid">
+           <div v-for="style in DIGIT_STYLES" :key="style.id" 
+                class="digit-option" :class="{active: state.digitFont === style.id}"
+                @click="state.digitFont = style.id">
+              <div class="preview-num" :style="{fontFamily: style.fontFamily, fontWeight: style.fontWeight||'700', letterSpacing: style.letterSpacing||'inherit'}">12</div>
+              <div class="opt-label">{{style.label}}</div>
+           </div>
+        </div>
+
+        <div class="section-title">Digit Color</div>
+        <div class="color-strip">
+           <div v-for="(color, i) in DIGIT_COLORS" :key="i"
+                class="color-chip" :class="{active: state.digitColor === color.c}"
+                :style="{background: color.c}" :title="color.c"
+                @click="setDigitColor(color)"></div>
+        </div>
+        <div class="color-row" style="margin-top:10px">
+          <label>Custom digit color</label>
+          <input type="color" v-model="state.digitColor" @input="updateCustomDigitColor" />
+        </div>
+
+        <div class="section-title">Glow Intensity</div>
+        <div class="slider-row">
+          <label>Glow</label>
+          <input type="range" v-model="state.glowIntensity" min="0" max="100" step="5" />
+          <span id="glow-val">{{state.glowIntensity}}</span>
         </div>
       </div>
 
-      <!-- Background Tab -->
-      <div class="tab-content" v-show="activeTab === 'background-tab'">
-        <h3>Background</h3>
-        <label>Solid Color</label>
-        <div class="d-flex gap-2 mb-3">
-          <input type="color" v-model="backgroundColor" class="form-control">
-          <button @click="applyBackground('solid')" class="btn btn-secondary">Apply</button>
-        </div>
-        
-        <label>Gradient (Deg, Start, End)</label>
-        <div class="d-flex gap-2 mb-2">
-          <input type="number" v-model="gradientDegree" style="width: 60px" class="form-control">
-          <input type="color" v-model="gradientStart" class="form-control">
-          <input type="color" v-model="gradientEnd" class="form-control">
-        </div>
-        <button @click="applyBackground('gradient')" class="btn btn-secondary w-100 mb-3">Apply Gradient</button>
+      <!-- ── TAB: CUSTOM DIGIT IMAGES ── -->
+      <div class="tab-panel" :class="{active: activeTab === 'tab-img-digits'}">
+        <p class="info-row">Upload individual images for each digit (0–9). The clock will use your images instead of text.</p>
+        <p class="info-row warn" v-show="state.useImgDigits" style="margin-top:6px;">✅ Now using your custom digit images!</p>
 
-        <label>Image URL</label>
-        <input type="text" v-model="backgroundImageUrl" placeholder="https://..." class="form-control mb-2">
-        <button @click="applyBackground('image')" class="btn btn-secondary w-100">Apply Image</button>
-      </div>
+        <div class="section-title">Upload Digits 0–9</div>
+        <div class="img-digit-grid">
+           <div v-for="i in 10" :key="i-1" class="img-digit-slot" @click="triggerDigitUpload(i-1)">
+              <span class="slot-num">DIGIT {{i-1}}</span>
+              <img v-if="state.imgDigits[i-1]" :src="state.imgDigits[i-1]" :alt="i-1" />
+              <span v-else class="slot-icon">➕</span>
+              <input type="file" :ref="(el) => digitInputs[i-1] = el" accept="image/*" style="display:none" @change="(e) => handleDigitUpload(e, i-1)" />
+           </div>
+        </div>
 
-      <!-- Digits Tab -->
-      <div class="tab-content" v-show="activeTab === 'digits-tab'">
-        <h3>Digits Style</h3>
-        <div class="settings-tabs nested-tabs mb-3">
-          <button 
-            v-for="digitTab in digitTabs" 
-            :key="digitTab.id"
-            @click="activeDigitTab = digitTab.id"
-            :class="['tab-button', 'nested', { active: activeDigitTab === digitTab.id }]"
-          >
-            {{ digitTab.name }}
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px">
+          <button class="upload-btn" @click="state.useImgDigits = true" :style="{opacity: imgDigitsCount > 0 ? 1 : 0.4, pointerEvents: imgDigitsCount > 0 ? 'auto' : 'none'}">
+            ✅ Use Images ({{imgDigitsCount}}/10)
+          </button>
+          <button class="upload-btn" @click="clearImgDigits" style="background:rgba(255,100,100,0.15);border-color:rgba(255,100,100,0.4);color:#ffaaaa">
+            🗑️ Clear All
           </button>
         </div>
+      </div>
 
-        <!-- Global Digit Settings -->
-        <div v-show="activeDigitTab === 'digits-global-tab'">
-          <label>Font Family</label>
-          <select v-model="globalFont" @change="applyGlobalFont" class="form-control">
-            <option value="'Orbitron', sans-serif">Orbitron</option>
-            <option value="'Roboto Mono', monospace">Roboto Mono</option>
-            <option value="'Poppins', sans-serif">Poppins</option>
-            <option value="custom">Custom Font...</option>
+      <!-- ── TAB: MODE & SETTINGS ── -->
+      <div class="tab-panel" :class="{active: activeTab === 'tab-mode'}">
+        <div class="section-title">Timers & Mode</div>
+        <div class="slider-row mb-2">
+          <label style="width:120px">Clock Mode</label>
+          <select v-model="state.clockMode" class="form-control" @change="onModeChange" style="flex:1">
+            <option value="clock">Realtime Clock</option>
+            <option value="timer">Timer</option>
+            <option value="stopwatch">Stopwatch</option>
           </select>
-          
-          <hr>
-          
-          <label>Texture / Gradient</label>
-          <div class="d-flex gap-2 mb-2">
-            <input type="color" v-model="digitSolidColor" class="form-control">
-            <input type="color" v-model="digitGradientStart" class="form-control">
-            <input type="color" v-model="digitGradientEnd" class="form-control">
-          </div>
-          <div class="d-flex gap-2 mb-2">
-            <button @click="applyDigitStyle('solid')" class="btn btn-secondary btn-small w-100">Solid</button>
-            <button @click="applyDigitStyle('gradient')" class="btn btn-secondary btn-small w-100">Gradient</button>
-          </div>
+        </div>
 
-          <label>Image Texture URL</label>
-          <input type="text" v-model="digitImageUrl" placeholder="https://..." class="form-control mb-2">
-          <button @click="applyDigitStyle('image')" class="btn btn-secondary btn-small w-100">Apply Texture</button>
+        <div v-show="state.clockMode === 'timer'" class="slider-row mb-2">
+          <label style="width:120px">Duration (s)</label>
+          <input type="number" v-model.number="state.timerDuration" min="0" class="form-control" style="flex:1; width:auto;">
+          <button @click="resetTimer" class="btn btn-secondary btn-small" style="padding: 6px 10px;">Set</button>
         </div>
-        
-        <!-- Individual Digit Settings -->
-        <div v-for="digit in ['hours', 'minutes', 'seconds']" :key="digit" v-show="activeDigitTab === `digits-${digit}-tab`">
-          <button @click="resetDigitToGlobal(digit)" class="btn btn-secondary w-100 mb-2">Reset to Global</button>
-          <label>Specific Color</label>
-          <input type="color" v-model="digitColors[digit]" class="form-control mb-2">
-          <button @click="applyDigitColor(digit)" class="btn btn-secondary w-100">Apply Color</button>
-        </div>
-      </div>
 
-      <!-- Layout Tab -->
-      <div class="tab-content" v-show="activeTab === 'layout-tab'">
-        <h3>Layout</h3>
-        <label>Size (VW)</label>
-        <input type="range" v-model="clockSize" min="5" max="50" class="form-range">
+        <div class="slider-row mb-2">
+          <label style="width:120px">Timezone Offset</label>
+          <input type="number" v-model.number="state.timezoneOffset" step="0.5" class="form-control" style="flex:1;">
+        </div>
         
-        <label>Timezone Offset (Hours)</label>
-        <input type="number" v-model="timezoneOffset" step="0.5" class="form-control">
-        
-        <hr>
-        
-        <button @click="toggleGrid" class="btn btn-secondary w-100 mb-2">Toggle Grid</button>
-        <button @click="resetPositions" class="btn btn-secondary w-100 mb-2">Reset Positions</button>
-        <button @click="resetAll" class="btn btn-danger w-100">Reset All & Reload</button>
-      </div>
+        <div class="section-title mt-3">Visuals & Audio</div>
+        <div class="slider-row mb-2">
+           <label style="width:120px"><input type="checkbox" v-model="state.showDate"> Show Date</label>
+           <label style="width:120px"><input type="checkbox" v-model="state.showControls"> Show Controls</label>
+        </div>
 
-      <!-- Style Tab -->
-      <div class="tab-content" v-show="activeTab === 'style-tab'">
-        <h3>Effects</h3>
-        <label>Opacity (BG / Digits)</label>
-        <div class="d-flex gap-2">
-          <input type="range" v-model="bgOpacity" max="1" step="0.1" class="form-range">
-          <input type="range" v-model="digitsOpacity" max="1" step="0.1" class="form-range">
+        <div class="slider-row mb-2">
+           <label style="width:120px"><input type="checkbox" v-model="state.soundEnabled"> Tick Sound</label>
+           <select v-model="state.soundType" :disabled="!state.soundEnabled" class="form-control" style="flex:1">
+              <option value="none">None</option>
+              <option value="click">Click</option>
+              <option value="beep">Beep</option>
+           </select>
         </div>
         
-        <label>Blur (BG / Digits)</label>
-        <div class="d-flex gap-2">
-          <input type="range" v-model="bgBlur" max="20" class="form-range">
-          <input type="range" v-model="digitsBlur" max="20" class="form-range">
+        <div class="section-title mt-3">Reset</div>
+        <div class="slider-row" style="justify-content:center;">
+           <button @click="resetPositions" class="btn btn-secondary w-100" style="padding: 10px;">Reset Position to Center</button>
         </div>
-        
-        <div class="form-check mt-2">
-          <input type="checkbox" v-model="glowEnabled" id="glow-toggle" class="form-check-input">
-          <label for="glow-toggle" class="form-check-label">Neon Glow</label>
-        </div>
-        <input type="color" v-model="glowColor" class="form-control mt-2">
-      </div>
-
-      <!-- Audio Tab -->
-      <div class="tab-content" v-show="activeTab === 'audio-tab'">
-        <h3>Audio</h3>
-        <div class="form-check mb-2">
-          <input type="checkbox" v-model="soundEnabled" id="sound-toggle" class="form-check-input">
-          <label for="sound-toggle" class="form-check-label">Enable Ticking</label>
-        </div>
-        <select v-model="soundType" class="form-select">
-          <option value="none">None</option>
-          <option value="click">Click</option>
-          <option value="beep">Beep</option>
-        </select>
-        <label>Volume</label>
-        <input type="range" v-model="soundVolume" max="1" step="0.1" class="form-range">
       </div>
     </div>
   </div>
 </template>
 
-<script>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+<script setup>
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
-export default {
-  name: 'AdvancedClock',
-  setup() {
-    // Clock state
-    const currentTime = ref(new Date())
-    const clockMode = ref('clock')
-    const isRunning = ref(true)
-    const speedMultiplier = ref(1)
-    const timezoneOffset = ref(0)
-    
-    // Timer state
-    const timerDuration = ref(60)
-    const timerTime = ref(0)
-    const timerMode = ref(false)
-    
-    // Display state
-    const showDate = ref(false)
-    const showControls = ref(false)
-    const showGrid = ref(false)
-    const showSettings = ref(false)
-    
-    // UI state
-    const activeTab = ref('mode-tab')
-    const activeDigitTab = ref('digits-global-tab')
-    const theme = ref('dark')
-    
-    // Background settings
-    const backgroundType = ref('solid')
-    const backgroundColor = ref('#000000')
-    const gradientDegree = ref(90)
-    const gradientStart = ref('#000000')
-    const gradientEnd = ref('#1e1e24')
-    const backgroundImageUrl = ref('')
-    
-    // Digit settings
-    const globalFont = ref("'Orbitron', sans-serif")
-    const digitSolidColor = ref('#ffffff')
-    const digitGradientStart = ref('#ffffff')
-    const digitGradientEnd = ref('#3b82f6')
-    const digitImageUrl = ref('')
-    const digitColors = ref({
-      hours: '#ffffff',
-      minutes: '#ffffff',
-      seconds: '#ffffff'
-    })
-    
-    // Style settings
-    const clockSize = ref(15)
-    const bgOpacity = ref(1)
-    const digitsOpacity = ref(1)
-    const bgBlur = ref(0)
-    const digitsBlur = ref(0)
-    const glowEnabled = ref(false)
-    const glowColor = ref('#ffffff')
-    
-    // Audio settings
-    const soundEnabled = ref(false)
-    const soundType = ref('click')
-    const soundVolume = ref(0.7)
-    
-    // Drag state
-    const isDragging = ref(false)
-    const dragOffset = ref({ x: 0, y: 0 })
-    const clockPosition = ref({ x: 50, y: 50 })
-    
-    // Tab definitions
-    const tabs = ref([
-      { id: 'mode-tab', name: 'Mode', icon: 'fas fa-clock' },
-      { id: 'background-tab', name: 'Background', icon: 'fas fa-image' },
-      { id: 'digits-tab', name: 'Digits', icon: 'fas fa-font' },
-      { id: 'layout-tab', name: 'Layout', icon: 'fas fa-th' },
-      { id: 'style-tab', name: 'Style', icon: 'fas fa-magic' },
-      { id: 'audio-tab', name: 'Audio', icon: 'fas fa-volume-up' }
-    ])
-    
-    const digitTabs = ref([
-      { id: 'digits-global-tab', name: 'Global' },
-      { id: 'digits-hours-tab', name: 'Hr' },
-      { id: 'digits-minutes-tab', name: 'Min' },
-      { id: 'digits-seconds-tab', name: 'Sec' }
-    ])
-    
-    let interval = null
-    
-    // Computed properties
-    const displayHours = computed(() => {
-      if (clockMode.value === 'timer' || clockMode.value === 'stopwatch') {
-        return Math.floor(timerTime.value / 3600).toString().padStart(2, '0')
-      }
-      const hours = currentTime.value.getHours()
-      return hours.toString().padStart(2, '0')
-    })
-    
-    const displayMinutes = computed(() => {
-      if (clockMode.value === 'timer' || clockMode.value === 'stopwatch') {
-        return Math.floor((timerTime.value % 3600) / 60).toString().padStart(2, '0')
-      }
-      return currentTime.value.getMinutes().toString().padStart(2, '0')
-    })
-    
-    const displaySeconds = computed(() => {
-      if (clockMode.value === 'timer' || clockMode.value === 'stopwatch') {
-        return (timerTime.value % 60).toString().padStart(2, '0')
-      }
-      return currentTime.value.getSeconds().toString().padStart(2, '0')
-    })
-    
-    const currentDate = computed(() => {
-      return currentTime.value.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    })
-    
-    const backgroundStyle = computed(() => {
-      let style = {
-        opacity: bgOpacity.value,
-        filter: `blur(${bgBlur.value}px)`
-      }
-      
-      if (backgroundType.value === 'solid') {
-        style.backgroundColor = backgroundColor.value
-      } else if (backgroundType.value === 'gradient') {
-        style.background = `linear-gradient(${gradientDegree.value}deg, ${gradientStart.value}, ${gradientEnd.value})`
-      } else if (backgroundType.value === 'image' && backgroundImageUrl.value) {
-        style.backgroundImage = `url(${backgroundImageUrl.value})`
-        style.backgroundSize = 'cover'
-        style.backgroundPosition = 'center'
-      }
-      
-      return style
-    })
-    
-    const clockStyle = computed(() => {
-      return {
-        fontSize: `${clockSize.value}vw`,
-        left: `${clockPosition.value.x}%`,
-        top: `${clockPosition.value.y}%`,
-        transform: 'translate(-50%, -50%)',
-        opacity: digitsOpacity.value,
-        filter: `blur(${digitsBlur.value}px)`,
-        textShadow: glowEnabled.value ? `0 0 10px ${glowColor.value}` : 'none'
-      }
-    })
-    
-    const dateStyle = computed(() => {
-      return {
-        left: `${clockPosition.value.x}%`,
-        top: `${clockPosition.value.y + 10}%`,
-        transform: 'translateX(-50%)'
-      }
-    })
-    
-    // Methods
-    const updateClock = () => {
-      if (clockMode.value === 'clock') {
-        const now = new Date()
-        const offset = timezoneOffset.value * 60 * 60 * 1000
-        currentTime.value = new Date(now.getTime() + offset)
-      } else if ((clockMode.value === 'timer' || clockMode.value === 'stopwatch') && isRunning.value) {
-        if (clockMode.value === 'timer' && timerTime.value > 0) {
-          timerTime.value -= speedMultiplier.value
-          if (timerTime.value <= 0) {
-            timerTime.value = 0
-            isRunning.value = false
-            playSound('complete')
-          }
-        } else if (clockMode.value === 'stopwatch') {
-          timerTime.value += speedMultiplier.value
-        }
-      }
-      
-      if (soundEnabled.value && soundType.value !== 'none') {
-        playSound('tick')
-      }
-    }
-    
-    const startClock = () => {
-      isRunning.value = true
-    }
-    
-    const pauseClock = () => {
-      isRunning.value = false
-    }
-    
-    const resetClock = () => {
-      if (clockMode.value === 'clock') {
-        currentTime.value = new Date()
-      } else {
-        timerTime.value = clockMode.value === 'timer' ? timerDuration.value : 0
-      }
-      isRunning.value = false
-    }
-    
-    const toggleTimer = () => {
-      if (clockMode.value === 'clock') {
-        clockMode.value = 'timer'
-        timerTime.value = timerDuration.value
-      }
-      isRunning.value = !isRunning.value
-    }
-    
-    const pauseTimer = () => {
-      isRunning.value = false
-    }
-    
-    const resetTimer = () => {
-      timerTime.value = clockMode.value === 'timer' ? timerDuration.value : 0
-      isRunning.value = false
-    }
-    
-    const setTimer = () => {
-      timerTime.value = timerDuration.value
-    }
-    
-    const onModeChange = () => {
-      resetClock()
-      if (clockMode.value === 'timer') {
-        timerTime.value = timerDuration.value
-      } else if (clockMode.value === 'stopwatch') {
-        timerTime.value = 0
-      }
-    }
-    
-    const toggleSettings = () => {
-      showSettings.value = !showSettings.value
-    }
-    
-    const applyBackground = (type) => {
-      backgroundType.value = type
-      saveSettings()
-    }
-    
-    const applyGlobalFont = () => {
-      saveSettings()
-    }
-    
-    const applyDigitStyle = (style) => {
-      saveSettings()
-    }
-    
-    const applyDigitColor = (digit) => {
-      saveSettings()
-    }
-    
-    const resetDigitToGlobal = (digit) => {
-      digitColors.value[digit] = digitSolidColor.value
-      saveSettings()
-    }
-    
-    const toggleGrid = () => {
-      showGrid.value = !showGrid.value
-    }
-    
-    const resetPositions = () => {
-      clockPosition.value = { x: 50, y: 50 }
-      saveSettings()
-    }
-    
-    const resetAll = () => {
-      localStorage.removeItem('advancedClockSettings')
-      location.reload()
-    }
-    
-    const saveSettings = () => {
-      const settings = {
-        clockMode: clockMode.value,
-        speedMultiplier: speedMultiplier.value,
-        timezoneOffset: timezoneOffset.value,
-        showDate: showDate.value,
-        showControls: showControls.value,
-        backgroundType: backgroundType.value,
-        backgroundColor: backgroundColor.value,
-        gradientDegree: gradientDegree.value,
-        gradientStart: gradientStart.value,
-        gradientEnd: gradientEnd.value,
-        backgroundImageUrl: backgroundImageUrl.value,
-        globalFont: globalFont.value,
-        digitColors: digitColors.value,
-        clockSize: clockSize.value,
-        bgOpacity: bgOpacity.value,
-        digitsOpacity: digitsOpacity.value,
-        bgBlur: bgBlur.value,
-        digitsBlur: digitsBlur.value,
-        glowEnabled: glowEnabled.value,
-        glowColor: glowColor.value,
-        soundEnabled: soundEnabled.value,
-        soundType: soundType.value,
-        soundVolume: soundVolume.value,
-        clockPosition: clockPosition.value
-      }
-      localStorage.setItem('advancedClockSettings', JSON.stringify(settings))
-    }
-    
-    const loadSettings = () => {
-      const saved = localStorage.getItem('advancedClockSettings')
-      if (saved) {
-        const settings = JSON.parse(saved)
-        Object.assign(settings, settings)
-      }
-    }
-    
-    const digitStyle = (digit) => {
-      const baseStyle = {
-        fontFamily: globalFont.value
-      }
-      
-      if (digit === 'separator') {
-        return baseStyle
-      }
-      
-      if (digitColors.value[digit] !== digitSolidColor.value) {
-        baseStyle.color = digitColors.value[digit]
-      }
-      
-      return baseStyle
-    }
-    
-    const playSound = (type) => {
-      if (!soundEnabled.value || soundType.value === 'none') return
-      
-      // Simple sound implementation - can be enhanced with actual audio files
-      const audio = new Audio()
-      audio.volume = soundVolume.value
-      
-      if (type === 'tick') {
-        // Create a simple tick sound
-        const oscillator = new (window.AudioContext || window.webkitAudioContext)()
-        const gainNode = oscillator.createGain()
-        const osc = oscillator.createOscillator()
-        
-        osc.connect(gainNode)
-        gainNode.connect(oscillator.destination)
-        
-        osc.frequency.value = soundType.value === 'click' ? 1000 : 800
-        gainNode.gain.value = 0.1
-        gainNode.gain.exponentialRampToValueAtTime(0.01, oscillator.currentTime + 0.1)
-        
-        osc.start()
-        osc.stop(oscillator.currentTime + 0.1)
-      }
-    }
-    
-    const startDrag = (e) => {
-      isDragging.value = true
-      const rect = e.target.getBoundingClientRect()
-      dragOffset.value = {
-        x: e.clientX - rect.left - rect.width / 2,
-        y: e.clientY - rect.top - rect.height / 2
-      }
-      
-      document.addEventListener('mousemove', onDrag)
-      document.addEventListener('mouseup', stopDrag)
-    }
-    
-    const onDrag = (e) => {
-      if (!isDragging.value) return
-      
-      const x = ((e.clientX - dragOffset.value.x) / window.innerWidth) * 100
-      const y = ((e.clientY - dragOffset.value.y) / window.innerHeight) * 100
-      
-      clockPosition.value = {
-        x: Math.max(10, Math.min(90, x)),
-        y: Math.max(10, Math.min(90, y))
-      }
-    }
-    
-    const stopDrag = () => {
-      isDragging.value = false
-      document.removeEventListener('mousemove', onDrag)
-      document.removeEventListener('mouseup', stopDrag)
-      saveSettings()
-    }
-    
-    // Lifecycle
-    onMounted(() => {
-      loadSettings()
-      interval = setInterval(updateClock, 1000 / speedMultiplier.value)
-    })
-    
-    onUnmounted(() => {
-      if (interval) {
-        clearInterval(interval)
-      }
-    })
-    
-    watch(speedMultiplier, (newSpeed) => {
-      if (interval) {
-        clearInterval(interval)
-        interval = setInterval(updateClock, 1000 / newSpeed)
-      }
-    })
-    
+const showSettings = ref(false)
+const activeTab = ref('tab-bg')
+const isDragging = ref(false)
+const dragOffset = ref({ x: 0, y: 0 })
+const currentTime = ref(new Date())
+
+const digits = ref(['0','0', '0','0', '0','0'])
+const flipState = ref([false, false, false, false, false, false])
+
+const digitInputs = ref([])
+
+const GRADIENTS = [
+  { label:'Deep Space', g:'linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)', c:'#1a1a2e' },
+  { label:'Aurora',     g:'linear-gradient(135deg,#0d0d0d 0%,#1a3a2a 40%,#0d2a1a 100%)', c:'#0d2a1a' },
+  { label:'Sunset',     g:'linear-gradient(135deg,#1a0533 0%,#6b1a2a 50%,#ff4e00 100%)', c:'#6b1a2a' },
+  { label:'Ocean',      g:'linear-gradient(135deg,#000428 0%,#004e92 100%)',               c:'#002a5c' },
+  { label:'Forest',     g:'linear-gradient(135deg,#0f2027 0%,#203a43 50%,#2c5364 100%)', c:'#203a43' },
+  { label:'Neon',       g:'linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)', c:'#302b63' },
+  { label:'Gold',       g:'linear-gradient(135deg,#1a0a00 0%,#3d1f00 50%,#7a4400 100%)', c:'#3d1f00' },
+  { label:'Rose',       g:'linear-gradient(135deg,#1a001a 0%,#3d0028 50%,#7a0050 100%)', c:'#3d0028' },
+  { label:'Midnight',   g:'linear-gradient(135deg,#000000 0%,#0a0a23 50%,#111133 100%)', c:'#0a0a23' },
+  { label:'Teal',       g:'linear-gradient(135deg,#001a22 0%,#003344 50%,#005566 100%)', c:'#003344' },
+]
+
+const DIGIT_STYLES = [
+  { id:'mono',      label:'Mono',       fontFamily:"'Courier New', monospace",       sample:'12' },
+  { id:'rounded',   label:'Rounded',    fontFamily:"'Nunito', 'Segoe UI', sans-serif", sample:'12' },
+  { id:'thin',      label:'Ultra Thin', fontFamily:"'Segoe UI Light','Helvetica Neue',sans-serif", fontWeight:'200', sample:'12' },
+  { id:'slab',      label:'Slab',       fontFamily:"Georgia, 'Times New Roman', serif", sample:'12' },
+  { id:'lcd',       label:'LCD',        fontFamily:"'Lucida Console','Courier New',monospace", letterSpacing:'4px', sample:'12' },
+  { id:'digital7',  label:'Digital',    fontFamily:"'Digital-7','Share Tech Mono','Courier New',monospace", sample:'12' },
+]
+
+const DIGIT_COLORS = [
+  { c:'#ffffff', s:'rgba(255,255,255,0.5)' },
+  { c:'#7c6fff', s:'rgba(124,111,255,0.9)' },
+  { c:'#ff6fd8', s:'rgba(255,111,216,0.9)' },
+  { c:'#43e8a8', s:'rgba(67,232,168,0.9)'  },
+  { c:'#ffd700', s:'rgba(255,215,0,0.9)'   },
+  { c:'#ff5f40', s:'rgba(255,95,64,0.9)'   },
+  { c:'#40d0ff', s:'rgba(64,208,255,0.9)'  },
+  { c:'#ff9940', s:'rgba(255,153,64,0.9)'  },
+]
+
+const state = reactive({
+  bgMode: 'gradient',
+  bgGradient: GRADIENTS[0].g,
+  bgColor: GRADIENTS[0].c,
+  bgImageUrl: null,
+  bgBlur: 0,
+  bgDarken: 0.25,
+  digitFont: 'mono',
+  digitColor: '#ffffff',
+  digitShadowColor: 'rgba(255,255,255,0.5)',
+  glowIntensity: 60,
+  useImgDigits: false,
+  imgDigits: Array(10).fill(null),
+  
+  clockMode: 'clock',
+  isRunning: true,
+  timerDuration: 60,
+  timerTime: 0,
+  timezoneOffset: 0,
+  showDate: true,
+  showControls: true,
+  clockPosition: { x: 50, y: 50 },
+  soundEnabled: false,
+  soundType: 'none',
+  soundVolume: 0.7
+})
+
+watch(() => state.bgMode, updateBodyBg, { immediate: true })
+watch(() => state.bgGradient, updateBodyBg)
+watch(() => state.bgColor, updateBodyBg)
+
+function updateBodyBg() {
+  const container = document.querySelector('.advanced-clock-container')
+  if (!container) return
+  if (state.bgMode === 'gradient') container.style.background = state.bgGradient
+  else if (state.bgMode === 'solid') container.style.background = state.bgColor
+  else container.style.background = '#000'
+}
+
+const overlayStyle = computed(() => {
+  if (state.bgMode === 'image' && state.bgImageUrl) {
     return {
-      // State
-      currentTime,
-      clockMode,
-      isRunning,
-      speedMultiplier,
-      timezoneOffset,
-      timerDuration,
-      timerTime,
-      timerMode,
-      showDate,
-      showControls,
-      showGrid,
-      showSettings,
-      activeTab,
-      activeDigitTab,
-      theme,
-      backgroundType,
-      backgroundColor,
-      gradientDegree,
-      gradientStart,
-      gradientEnd,
-      backgroundImageUrl,
-      globalFont,
-      digitSolidColor,
-      digitGradientStart,
-      digitGradientEnd,
-      digitImageUrl,
-      digitColors,
-      clockSize,
-      bgOpacity,
-      digitsOpacity,
-      bgBlur,
-      digitsBlur,
-      glowEnabled,
-      glowColor,
-      soundEnabled,
-      soundType,
-      soundVolume,
-      clockPosition,
-      tabs,
-      digitTabs,
-      
-      // Computed
-      displayHours,
-      displayMinutes,
-      displaySeconds,
-      currentDate,
-      backgroundStyle,
-      clockStyle,
-      dateStyle,
-      
-      // Methods
-      startClock,
-      pauseClock,
-      resetClock,
-      toggleTimer,
-      pauseTimer,
-      resetTimer,
-      setTimer,
-      onModeChange,
-      toggleSettings,
-      applyBackground,
-      applyGlobalFont,
-      applyDigitStyle,
-      applyDigitColor,
-      resetDigitToGlobal,
-      toggleGrid,
-      resetPositions,
-      resetAll,
-      digitStyle,
-      startDrag
+      backgroundImage: `url(${state.bgImageUrl})`,
+      filter: `blur(${state.bgBlur}px)`,
+      opacity: 1,
+      background: `linear-gradient(rgba(0,0,0,${state.bgDarken}),rgba(0,0,0,${state.bgDarken}))`,
+      backgroundBlendMode: 'darken'
     }
   }
+  return { opacity: 0 }
+})
+
+const stageStyle = computed(() => {
+  return {
+    position: 'absolute',
+    left: `${state.clockPosition.x}%`,
+    top: `${state.clockPosition.y}%`,
+    transform: 'translate(-50%, -50%)',
+    zIndex: 1
+  }
+})
+
+const digitStyle = computed(() => {
+  const style = DIGIT_STYLES.find(s => s.id === state.digitFont) || DIGIT_STYLES[0]
+  const g = state.glowIntensity
+  const c = state.digitShadowColor
+  const textShadow = g > 0 ? `0 0 ${g*0.4}px ${c}, 0 0 ${g}px ${c}` : 'none'
+  return {
+    color: state.digitColor,
+    fontFamily: style.fontFamily,
+    fontWeight: style.fontWeight || '700',
+    letterSpacing: style.letterSpacing || '-2px',
+    textShadow
+  }
+})
+
+const displayValues = computed(() => {
+  if (state.clockMode === 'timer' || state.clockMode === 'stopwatch') {
+    const time = state.timerTime
+    const h = Math.floor(time / 3600).toString().padStart(2, '0')
+    const m = Math.floor((time % 3600) / 60).toString().padStart(2, '0')
+    const s = Math.floor(time % 60).toString().padStart(2, '0')
+    return [h[0], h[1], m[0], m[1], s[0], s[1]]
+  }
+  const h = currentTime.value.getHours().toString().padStart(2, '0')
+  const m = currentTime.value.getMinutes().toString().padStart(2, '0')
+  const s = currentTime.value.getSeconds().toString().padStart(2, '0')
+  return [h[0], h[1], m[0], m[1], s[0], s[1]]
+})
+
+watch(displayValues, (newVals) => {
+  newVals.forEach((val, i) => {
+    if (val !== digits.value[i]) {
+      // Trigger flip
+      flipState.value[i] = false
+      digits.value[i] = val
+      nextTick(() => {
+        flipState.value[i] = true
+      })
+    }
+  })
+}, { deep: true })
+
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const currentDate = computed(() => {
+  return `${DAYS[currentTime.value.getDay()]} · ${MONTHS[currentTime.value.getMonth()]} ${currentTime.value.getDate()}, ${currentTime.value.getFullYear()}`
+})
+
+let interval = null
+const updateClock = () => {
+  if (state.clockMode === 'clock') {
+    const now = new Date()
+    const offset = state.timezoneOffset * 60 * 60 * 1000
+    currentTime.value = new Date(now.getTime() + offset)
+  } else if ((state.clockMode === 'timer' || state.clockMode === 'stopwatch') && state.isRunning) {
+    if (state.clockMode === 'timer' && state.timerTime > 0) {
+      state.timerTime -= 1
+      if (state.timerTime <= 0) {
+        state.timerTime = 0
+        state.isRunning = false
+        playSound('complete')
+      }
+    } else if (state.clockMode === 'stopwatch') {
+      state.timerTime += 1
+    }
+  }
+  
+  if (state.soundEnabled && state.soundType !== 'none') playSound('tick')
 }
+
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    if (interval) {
+      clearInterval(interval)
+      interval = null
+    }
+  } else {
+    updateClock()
+    interval = setInterval(updateClock, 1000)
+  }
+}
+
+const toggleSettings = () => showSettings.value = !showSettings.value
+const setGradient = (grad) => { state.bgMode = 'gradient'; state.bgGradient = grad.g; state.bgColor = grad.c }
+const setDigitColor = (c) => { state.digitColor = c.c; state.digitShadowColor = c.s }
+const updateCustomDigitColor = () => { state.digitShadowColor = state.digitColor + 'cc' }
+
+const toggleTimer = () => {
+  if (state.clockMode === 'clock') {
+    state.clockMode = 'timer'
+    state.timerTime = state.timerDuration
+  }
+  state.isRunning = !state.isRunning
+}
+const resetTimer = () => {
+  if (state.clockMode === 'clock') currentTime.value = new Date()
+  else state.timerTime = state.clockMode === 'timer' ? state.timerDuration : 0
+  state.isRunning = false
+}
+const onModeChange = () => {
+  resetTimer()
+  if (state.clockMode === 'timer') state.timerTime = state.timerDuration
+  else if (state.clockMode === 'stopwatch') state.timerTime = 0
+}
+
+const handleBgUpload = (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (evt) => {
+    state.bgImageUrl = evt.target.result
+    state.bgMode = 'image'
+  }
+  reader.readAsDataURL(file)
+}
+
+const triggerDigitUpload = (i) => {
+  if (digitInputs.value[i]) digitInputs.value[i].click()
+}
+const handleDigitUpload = (e, i) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (evt) => {
+    state.imgDigits[i] = evt.target.result
+  }
+  reader.readAsDataURL(file)
+}
+const clearImgDigits = () => {
+  state.imgDigits = Array(10).fill(null)
+  state.useImgDigits = false
+}
+const imgDigitsCount = computed(() => state.imgDigits.filter(Boolean).length)
+
+// Dragging
+const startDrag = (e) => {
+  const stage = document.getElementById('stage')
+  if (!stage) return
+  isDragging.value = true
+  const rect = stage.getBoundingClientRect()
+  dragOffset.value = {
+    x: e.clientX - rect.left - rect.width / 2,
+    y: e.clientY - rect.top - rect.height / 2
+  }
+}
+const onDrag = (e) => {
+  if (!isDragging.value) return
+  const x = ((e.clientX - dragOffset.value.x) / window.innerWidth) * 100
+  const y = ((e.clientY - dragOffset.value.y) / window.innerHeight) * 100
+  state.clockPosition = {
+    x: Math.max(0, Math.min(100, x)),
+    y: Math.max(0, Math.min(100, y))
+  }
+}
+const stopDrag = () => {
+  if (isDragging.value) saveSettings()
+  isDragging.value = false
+}
+const resetPositions = () => {
+  state.clockPosition = { x: 50, y: 50 }
+  saveSettings()
+}
+
+// Sound
+const playSound = (type) => {
+  if (!state.soundEnabled || state.soundType === 'none') return
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const gainNode = audioCtx.createGain()
+    const osc = audioCtx.createOscillator()
+    osc.connect(gainNode)
+    gainNode.connect(audioCtx.destination)
+    if (type === 'tick') {
+      osc.frequency.value = state.soundType === 'click' ? 1000 : 800
+      gainNode.gain.value = state.soundVolume * 0.1
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1)
+      osc.start()
+      osc.stop(audioCtx.currentTime + 0.1)
+    }
+  } catch(e) {}
+}
+
+const saveSettings = () => {
+  localStorage.setItem('advancedClockSettingsV3', JSON.stringify(state))
+}
+const loadSettings = () => {
+  const saved = localStorage.getItem('advancedClockSettingsV3') // keep fresh logic apart from old v1/v2
+  if (saved) {
+    try { Object.assign(state, JSON.parse(saved)) } catch(e){}
+  }
+}
+
+watch(state, saveSettings, { deep: true })
+
+onMounted(() => {
+  loadSettings()
+  nextTick(() => {
+    updateBodyBg()
+  })
+  updateClock()
+  interval = setInterval(updateClock, 1000)
+
+  // Pause rendering when tab is hidden to fix CPU/GPU spikes
+  document.addEventListener("visibilitychange", handleVisibilityChange)
+  
+  // Set initial digit values
+  const initVals = displayValues.value
+  for (let i = 0; i < 6; i++) {
+    digits.value[i] = initVals[i]
+  }
+})
+
+onUnmounted(() => {
+  document.removeEventListener("visibilitychange", handleVisibilityChange)
+  if (interval) clearInterval(interval)
+})
 </script>
 
 <style scoped>
+/* ─── Reset & Base ─── */
+*, *::before, *::after { box-sizing: border-box; }
+
 .advanced-clock-container {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #000;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  transition: background 0.6s ease;
   z-index: 1;
 }
 
-#background-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-#alignment-grid {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
+/* ─── BG Image Overlay ─── */
+#bg-overlay {
+  position: absolute; inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   pointer-events: none;
+  z-index: 0;
 }
 
-.grid-line {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.1);
+/* ─── Clock Stage ─── */
+#stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
 }
 
-.grid-line.v-mid {
-  left: 50%;
-  width: 1px;
-  height: 100%;
-  transform: translateX(-50%);
-}
-
-.grid-line.h-mid {
-  top: 50%;
-  width: 100%;
-  height: 1px;
-  transform: translateY(-50%);
-}
-
-#clock-container {
-  position: absolute;
-  z-index: 10;
+/* ─── Clock Face ─── */
+#clock-face {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 700;
-  color: #fff;
+  gap: 0;
+  padding: 28px 44px;
+  border-radius: 28px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(18px);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  box-shadow: 0 8px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  transition: background 0.4s, box-shadow 0.4s;
   cursor: move;
+}
+
+/* ─── Digit Cells ─── */
+.digit-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px; height: 110px;
+}
+.digit-cell span {
+  font-size: 96px;
+  line-height: 1;
+  transition: color 0.4s, text-shadow 0.4s, font-family 0.3s, opacity 0.15s;
+  user-select: none;
+}
+.digit-cell img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(255,255,255,0.5));
+  transition: filter 0.4s;
+}
+
+.digit-cell.flip span, .digit-cell.flip img {
+  animation: flipIn 0.18s ease-out;
+}
+@keyframes flipIn {
+  0%   { transform: scaleY(0.3) translateY(-8px); opacity: 0.4; }
+  100% { transform: scaleY(1)   translateY(0);    opacity: 1;   }
+}
+
+.colon {
+  font-size: 84px;
+  opacity: 0.85;
+  margin: 0 2px;
+  animation: colonBlink 1s step-end infinite;
+  line-height: 1;
+  user-select: none;
+  transition: color 0.4s, text-shadow 0.4s;
+}
+@keyframes colonBlink {
+  0%, 100% { opacity: 0.85; }
+  50%       { opacity: 0.2;  }
+}
+
+#date-line {
+  font-size: 16px;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
   user-select: none;
 }
 
-.chunk {
-  display: inline-block;
-  min-width: 1.2em;
-  text-align: center;
-  line-height: 1;
-}
-
-.sep {
-  margin: 0 0.1em;
-  opacity: 0.7;
-}
-
-#date-display {
-  position: absolute;
-  z-index: 11;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.8em;
-  font-family: 'Inter', sans-serif;
-  text-align: center;
-  white-space: nowrap;
-}
-
+/* Top Controls */
 .top-controls {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
   display: flex;
   gap: 10px;
-}
-
-.control-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.control-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.1);
-}
-
-.settings-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 20;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.settings-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.1);
-}
-
-.settings-panel {
-  position: absolute;
-  top: 70px;
-  right: 20px;
-  width: 350px;
-  max-height: 80vh;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  padding: 20px;
-  z-index: 30;
-  overflow-y: auto;
-  backdrop-filter: blur(10px);
-}
-
-.settings-tabs {
-  display: flex;
-  gap: 5px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.tab-button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  padding: 8px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.9em;
-}
-
-.tab-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.tab-button.active {
-  background: rgba(59, 130, 246, 0.5);
-  border-color: #3b82f6;
-}
-
-.tab-content {
-  color: #fff;
-}
-
-.tab-content h3 {
-  margin-bottom: 15px;
-  color: #3b82f6;
-  font-size: 1.1em;
-}
-
-.tab-content label {
-  display: block;
   margin-bottom: 5px;
-  font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.8);
 }
-
-.tab-content input,
-.tab-content select {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.top-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
   color: #fff;
-  border-radius: 5px;
-  padding: 8px;
-  margin-bottom: 10px;
-  width: 100%;
-}
-
-.tab-content input[type="color"] {
-  height: 40px;
+  width: 40px; height: 40px;
+  border-radius: 50%;
   cursor: pointer;
-}
-
-.tab-content input[type="range"] {
-  cursor: pointer;
-}
-
-.tab-content button {
-  background: #3b82f6;
-  border: none;
-  color: #fff;
-  padding: 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.tab-content button:hover {
-  background: #2563eb;
-}
-
-.tab-content button.btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.tab-content button.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.tab-content button.btn-danger {
-  background: #ef4444;
-}
-
-.tab-content button.btn-danger:hover {
-  background: #dc2626;
-}
-
-.nested-tabs {
-  margin-bottom: 15px;
-}
-
-.nested {
-  font-size: 0.8em;
-  padding: 5px 8px;
-}
-
-.form-check {
-  margin-bottom: 10px;
-}
-
-.form-check-input {
-  margin-right: 8px;
-}
-
-.d-flex {
   display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
-.gap-2 {
-  gap: 8px;
-}
-
-.w-100 {
-  width: 100%;
-}
-
-.mt-2 {
-  margin-top: 8px;
-}
-
-.mt-3 {
-  margin-top: 12px;
-}
-
-.mb-2 {
-  margin-bottom: 8px;
-}
-
-.mb-3 {
-  margin-bottom: 12px;
-}
-
-.text-center {
-  text-align: center;
-}
-
-.btn-small {
-  padding: 5px 8px;
-  font-size: 0.8em;
-}
-
-hr {
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  margin: 15px 0;
-}
-
-/* Dark theme */
-[data-theme="dark"] {
-  background: #000;
+.settings-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
   color: #fff;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+.settings-btn:hover, .top-btn:hover {
+  background: rgba(255,255,255,0.2);
 }
 
-/* Light theme */
-[data-theme="light"] {
-  background: #fff;
-  color: #000;
+/* Settings Controls Panel */
+#controls {
+  position: absolute;
+  top: 70px; right: 20px;
+  z-index: 100;
+  background: rgba(15,15,25,0.82);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 16px;
+  backdrop-filter: blur(24px);
+  padding: 0;
+  width: min(94vw, 420px);
+  color: #fff;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  text-align: left;
 }
 
-[data-theme="light"] .settings-panel {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(0, 0, 0, 0.2);
+#tab-bar {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.tab-btn {
+  flex: 1;
+  padding: 13px 8px;
+  background: none; border: none;
+  color: #8888aa;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; position: relative;
+}
+.tab-btn::after {
+  content: ''; position: absolute;
+  bottom: 0; left: 20%; right: 20%;
+  height: 2px; background: #7c6fff;
+  border-radius: 2px; transform: scaleX(0); transition: 0.25s;
+}
+.tab-btn:hover { color: #fff; }
+.tab-btn.active { color: #fff; }
+.tab-btn.active::after { transform: scaleX(1); }
+
+.tab-panel { display: none; padding: 20px 24px; max-height: calc(100vh - 150px); overflow-y: auto;}
+.tab-panel.active { display: block; }
+
+.section-title {
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: #8888aa; margin-bottom: 12px; margin-top: 16px;
+}
+.section-title:first-child { margin-top: 0; }
+
+.swatch-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch {
+  width: 36px; height: 36px; border-radius: 10px;
+  cursor: pointer; border: 2px solid transparent; flex-shrink: 0;
+}
+.swatch:hover, .swatch.active { border-color: #fff; transform: scale(1.1); }
+
+.color-row, .slider-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.color-row label, .slider-row label { font-size: 13px; color: #8888aa; flex: 1; flex-shrink: 0;}
+input[type="color"] { width: 44px; height: 32px; border-radius: 8px; background: none; border:1px solid #555;}
+input[type="range"] { flex: 1; accent-color: #7c6fff; }
+.slider-row span { font-size: 12px; color: #8888aa; width: 36px; text-align: right; }
+
+.upload-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 18px; border-radius: 10px;
+  background: rgba(124,111,255,0.18); border: 1.5px solid rgba(124,111,255,0.4);
+  color: #c4baff; font-size: 13px; cursor: pointer; margin-top: 10px;
 }
 
-[data-theme="light"] .tab-content label {
-  color: rgba(0, 0, 0, 0.8);
+.digit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.digit-option {
+  padding: 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.08);
+  cursor: pointer; text-align: center; background: rgba(255,255,255,0.04);
 }
+.digit-option.active { border-color: #7c6fff; background: rgba(124,111,255,0.15); }
+.preview-num { font-size: 28px; color: #fff; }
+.opt-label { font-size: 10px; color: #8888aa; text-transform: uppercase; }
 
-[data-theme="light"] .tab-content input,
-[data-theme="light"] .tab-content select {
-  background: rgba(0, 0, 0, 0.1);
-  border-color: rgba(0, 0, 0, 0.2);
-  color: #000;
+.color-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.color-chip { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+.color-chip.active { border-color: #fff; }
+
+.img-digit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.img-digit-slot {
+  border-radius: 10px; border: 1.5px dashed rgba(255,255,255,0.2);
+  padding: 6px; display: flex; flex-direction: column; align-items: center;
+  cursor: pointer; background: rgba(255,255,255,0.03); min-height: 50px;
 }
+.img-digit-slot .slot-num { font-size: 10px; color: #8888aa; }
+.img-digit-slot img { width: 100%; height: auto; object-fit: contain; }
 
-[data-theme="light"] #clock-container {
-  color: #000;
-}
+.btn { padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.btn-secondary { background: rgba(255,255,255,0.2); }
+.form-control { background: rgba(255,255,255,0.1); border: 1px solid #555; color: #fff; padding: 6px; border-radius: 4px; }
 
-[data-theme="light"] #date-display {
-  color: rgba(0, 0, 0, 0.7);
+.info-row { font-size: 12px; color: #8888aa; margin-top: 8px; }
+.info-row.warn { color: #ffb347; }
+
+.mb-2 { margin-bottom: 8px; }
+.mt-3 { margin-top: 12px; }
+.w-100 { width: 100%; }
+
+@media (max-width: 520px) {
+  .digit-cell { width: 56px; height: 72px; }
+  .digit-cell span { font-size: 62px; }
+  .colon { font-size: 54px; }
+  #clock-face { padding: 18px 20px; border-radius: 20px; }
 }
 </style>

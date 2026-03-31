@@ -47,16 +47,16 @@
               </div>
               <ul class="dropdown-list">
                 <li @click="navigateFromDropdown('/profile')">
-                  <i class="fas fa-user"></i> User Profile
+                  <i class="fas fa-user"></i> {{ t('settings.profile') }}
                 </li>
                 <li @click="navigateFromDropdown('/inventory')">
                   <i class="fas fa-box-open"></i> Inventory
                 </li>
                 <li @click="navigateFromDropdown('/settings')">
-                  <i class="fas fa-cog"></i> Settings
+                  <i class="fas fa-cog"></i> {{ t('sidebar.settings') }}
                 </li>
                 <li class="logout-item" @click="logout">
-                  <i class="fas fa-sign-out-alt"></i> Log Out
+                  <i class="fas fa-sign-out-alt"></i> {{ t('settings.logout') }}
                 </li>
               </ul>
             </div>
@@ -65,11 +65,21 @@
       </div>
     </header>
 
+    <!-- Global Power Saver Alert -->
+    <transition name="banner-fade">
+      <div v-if="systemStore.powerMode === 'power_saver'" class="power-saver-banner">
+        <div class="banner-content">
+          <i class="fas fa-bolt banner-icon pulse-alert"></i>
+          <span class="banner-text"><strong>{{ t('power_saver.powersaver') }} {{ t('power_saver.active') }}:</strong> {{ t('power_saver.banner') }}</span>
+        </div>
+      </div>
+    </transition>
+
     <!-- Main Content -->
     <main class="dashboard-main-content custom-scrollbar">
       <router-view v-slot="{ Component }">
         <transition name="page-fade" mode="out-in">
-          <component :is="Component" />
+          <component :is="Component" v-if="Component" />
         </transition>
       </router-view>
     </main>
@@ -82,10 +92,15 @@ import { useRouter, useRoute } from 'vue-router'
 import { kpiBalance } from '@/utils/api.js'
 import SideMenu from '@/components/SideMenu.vue'
 import { useUserStore } from '@/stores/userStore.js'
+import { useSystemStore } from '@/stores/systemStore.js'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const systemStore = useSystemStore()
 
 const isUserDropdownOpen = ref(false)
 const userDropdownRef = ref(null)
@@ -120,6 +135,7 @@ const avatarUrl = computed(() => userStore.avatarUrl)
 
 onMounted(() => {
   userStore.init()
+  systemStore.init()
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -395,9 +411,23 @@ const initials = computed(() => {
 }
 
 @media (max-width: 768px) {
+  .dashboard-header {
+    padding: 0 1rem;
+    height: 60px;
+  }
+  
   .header-left {
-    margin-left: 40px;
-    gap: 1rem;
+    margin-left: 35px;
+    gap: 0.5rem;
+  }
+  
+  .header-right {
+    gap: 0.75rem;
+  }
+  
+  .kpi-display-global {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8rem;
   }
   
   .logo-text {
@@ -411,5 +441,56 @@ const initials = computed(() => {
   .dashboard-main-content {
     padding: 1rem;
   }
+}
+
+/* Power Saver Banner CSS */
+.power-saver-banner {
+  margin-top: 70px;
+  width: 100%;
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+  color: white;
+  padding: 0.75rem 0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  z-index: 85;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+}
+
+.banner-icon {
+  font-size: 1.25rem;
+  color: #fffbeb;
+}
+
+.pulse-alert {
+  animation: alert-pulse 2s infinite;
+}
+
+@keyframes alert-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.banner-fade-enter-active,
+.banner-fade-leave-active {
+  transition: all 0.4s ease;
+}
+.banner-fade-enter-from,
+.banner-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+/* Adjust main content margin when banner is present */
+.power-saver-banner + .dashboard-main-content {
+  margin-top: 0 !important;
 }
 </style>
