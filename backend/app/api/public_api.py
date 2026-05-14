@@ -4,7 +4,9 @@ from app.models.drive import DriveFile
 from app.models.vault import VaultFile
 from app.models.comment import Comment
 from app.api.auth import get_current_user_optional
+from app.core.security import verify_password, get_password_hash
 from app.core.vault_crypto import get_vault_cipher
+from app.core.database import redis_client
 import os
 import hashlib
 import zipfile
@@ -28,6 +30,19 @@ def cleanup_expired_tokens():
     for token in list(preview_tokens.keys()):
         if preview_tokens[token][1] < now:
             del preview_tokens[token]
+async def check_rate_limit(request: Request, key_prefix: str, limit: int = 5, window: int = 60):
+    """Simple Redis-based rate limiter"""
+    client_ip = request.client.host
+    key = f"rate_limit:{key_prefix}:{client_ip}"
+    
+    current = await redis_client.get(key)
+    if current and int(current) >= limit:
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+    
+    pipe = redis_client.pipeline()
+    await pipe.incr(key)
+    await pipe.expire(key, window)
+    await pipe.execute()
 
 class PasswordVerifyRequest(BaseModel):
     password: str
@@ -109,8 +124,19 @@ async def generate_preview_token(share_id: str, password: Optional[str] = None):
         
     # Password check
     if item.share_password:
-        if not password or hashlib.sha256(password.encode()).hexdigest() != item.share_password:
+        if not password:
              raise HTTPException(status_code=401, detail="Password required")
+        
+        # Verify password (support both bcrypt and legacy SHA-256)
+        is_valid = False
+        try:
+            is_valid = verify_password(password, item.share_password)
+        except Exception:
+            # Fallback to legacy SHA-256
+            is_valid = hashlib.sha256(password.encode()).hexdigest() == item.share_password
+            
+        if not is_valid:
+             raise HTTPException(status_code=401, detail="Invalid password")
              
     cleanup_expired_tokens()
     token = str(uuid.uuid4())
@@ -119,14 +145,23 @@ async def generate_preview_token(share_id: str, password: Optional[str] = None):
     return {"token": token}
 
 @router.post("/public/verify/{share_id}")
-async def verify_public_password(share_id: str, req: PasswordVerifyRequest):
-    """Verify password for a shared item"""
+async def verify_public_password(share_id: str, req: PasswordVerifyRequest, request: Request):
+    """Verify password for a shared item with rate limiting"""
+    # Apply rate limit: 5 attempts per minute
+    await check_rate_limit(request, f"share_verify:{share_id}", limit=5, window=60)
+    
     item, _ = get_item_by_share_id(share_id)
     if not item or not item.share_password:
         raise HTTPException(status_code=404, detail="No password required or link not found")
     
-    password_hash = hashlib.sha256(req.password.encode()).hexdigest()
-    if password_hash == item.share_password:
+    is_valid = False
+    try:
+        is_valid = verify_password(req.password, item.share_password)
+    except Exception:
+        # Fallback to legacy SHA-256
+        is_valid = hashlib.sha256(req.password.encode()).hexdigest() == item.share_password
+        
+    if is_valid:
         return {"status": "ok"}
     else:
         raise HTTPException(status_code=401, detail="Invalid password")
@@ -138,10 +173,19 @@ async def list_shared_folder(share_id: str, folder_path: str = Query("/"), passw
     if not item or not item.is_folder:
         raise HTTPException(status_code=404, detail="Shared folder not found")
     
-    # Verification logic (simplified for listing, ideally handled by session/cookie in real app)
+    # Verification logic
     if item.share_password:
-        if not password or hashlib.sha256(password.encode()).hexdigest() != item.share_password:
+        if not password:
              raise HTTPException(status_code=401, detail="Password required")
+        
+        is_valid = False
+        try:
+            is_valid = verify_password(password, item.share_password)
+        except Exception:
+            is_valid = hashlib.sha256(password.encode()).hexdigest() == item.share_password
+            
+        if not is_valid:
+             raise HTTPException(status_code=401, detail="Invalid password")
 
     # For folders, we return children that match the owner and the virtual path
     if item_type == "drive":
@@ -192,8 +236,17 @@ async def download_shared_file(
 
     # 3. Password check (if no token was used or needed)
     if item.share_password and not token:
-        if not password or hashlib.sha256(password.encode()).hexdigest() != item.share_password:
+        if not password:
              raise HTTPException(status_code=401, detail="Password required")
+             
+        is_valid = False
+        try:
+            is_valid = verify_password(password, item.share_password)
+        except Exception:
+            is_valid = hashlib.sha256(password.encode()).hexdigest() == item.share_password
+            
+        if not is_valid:
+             raise HTTPException(status_code=401, detail="Invalid password")
 
     # Update counts
     item.download_count += 1
@@ -269,8 +322,17 @@ async def zip_public_folder(
         
     # Password check
     if item.share_password:
-        if not password or hashlib.sha256(password.encode()).hexdigest() != item.share_password:
+        if not password:
             raise HTTPException(status_code=401, detail="Password required")
+            
+        is_valid = False
+        try:
+            is_valid = verify_password(password, item.share_password)
+        except Exception:
+            is_valid = hashlib.sha256(password.encode()).hexdigest() == item.share_password
+            
+        if not is_valid:
+            raise HTTPException(status_code=401, detail="Invalid password")
 
     # Get all items recursively
     # if sub_path is provided, we start from base_path + sub_path
@@ -371,8 +433,17 @@ async def get_public_thumbnail(
         is_valid = True # Placeholder for token validation logic
     
     if not is_valid and root_item.share_password:
-        if not password or hashlib.sha256(password.encode()).hexdigest() != root_item.share_password:
+        if not password:
             raise HTTPException(status_code=401, detail="Authentication required")
+            
+        pass_valid = False
+        try:
+            pass_valid = verify_password(password, root_item.share_password)
+        except Exception:
+            pass_valid = hashlib.sha256(password.encode()).hexdigest() == root_item.share_password
+            
+        if not pass_valid:
+            raise HTTPException(status_code=401, detail="Invalid password")
 
     from app.core.thumbnails import get_thumbnail_path, generate_thumbnail, SUPPORTED_IMAGE_TYPES, SUPPORTED_VIDEO_TYPES
     thumb_path = get_thumbnail_path(str(target_item.id))

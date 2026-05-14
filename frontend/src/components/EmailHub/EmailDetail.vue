@@ -137,6 +137,7 @@
 import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { apiGet, apiPost } from '@/utils/api'
 import { showSuccess, showError } from '@/utils/notification'
+import { throttle } from '@/utils/throttle'
 import { io } from 'socket.io-client'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
@@ -290,10 +291,10 @@ onMounted(() => {
     const token = localStorage.getItem('token') || '';
     socket = io({ auth: { token }, transports: ['websocket', 'polling'], reconnection: false });
     socket.on('connect_error', () => { console.warn("Socket.IO queue connection bypassed."); });
-    socket.on('ai_queue_status', (data) => {
+    socket.on('ai_queue_status', throttle((data) => {
         if (data.status === 'processing') queuePosition.value = 0;
         else if (data.position) queuePosition.value = data.position;
-    });
+    }, 1000));
 })
 
 onUnmounted(() => {

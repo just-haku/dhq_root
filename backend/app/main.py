@@ -13,23 +13,8 @@ from app.core.storage import storage_service
 
 logger = logging.getLogger(__name__)
 
-# Custom middleware to handle large file uploads
-class LargeFileUploadMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Set content length limit for large uploads
-        content_length = request.headers.get("content-length")
-        if content_length:
-            content_length = int(content_length)
-            max_size = 10 * 1024 * 1024 * 1024  # 10GB
-            if content_length > max_size:
-                from fastapi import HTTPException
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"Request entity too large. Maximum size is {max_size // (1024*1024*1024)}GB"
-                )
-        
-        response = await call_next(request)
-        return response
+# Custom middleware to handle large file uploads removed due to StreamingResponse incompatibility
+# Set via server configuration instead.
 
 from contextlib import asynccontextmanager
 
@@ -53,15 +38,12 @@ async def lifespan(app: FastAPI):
     await system_watcher.stop()
     logger.info("Order Center, Service Cache, Email Watchers, and System Watcher stopped")
 
-# Create FastAPI app with custom middleware
+# Create FastAPI app
 app = FastAPI(
     title="DHQ Backend", 
     version="1.0.0",
     lifespan=lifespan
 )
-
-# Add custom middleware first
-app.add_middleware(LargeFileUploadMiddleware)
 
 # CORS Middleware
 app.add_middleware(
@@ -94,6 +76,11 @@ os.makedirs(banner_dir, exist_ok=True)
 
 app.mount("/api/uploads/avatars", StaticFiles(directory=avatar_dir), name="avatars")
 app.mount("/api/uploads/banners", StaticFiles(directory=banner_dir), name="banners")
+
+# Shop assets mount
+shop_dir = os.path.join(primary_storage, "shop_assets")
+os.makedirs(shop_dir, exist_ok=True)
+app.mount("/api/uploads/shop", StaticFiles(directory=shop_dir), name="shop_assets")
 
 @app.get("/", response_class=HTMLResponse)
 async def decoy_landing():
@@ -157,7 +144,7 @@ async def health_check():
     return {"status": "healthy", "service": "DHQ Backend"}
 
 # Import and include routers
-from app.api import auth, admin, hub, arcade, gifts, gifts_management, activity, monitoring, user_management, ordering, ordering_enhanced, organic_ordering, smart_collaboration, kpi_bonus, drive, test_api, gcode_generator, economy, order_center, mock_api, email_hub, prompt_api, virus_scan, ai_chat, system_config, vault_api, public_api
+from app.api import auth, admin, hub, arcade, gifts, gifts_management, activity, monitoring, user_management, ordering, ordering_enhanced, organic_ordering, smart_collaboration, kpi_bonus, drive, test_api, gcode_generator, economy, order_center, mock_api, email_hub, prompt_api, virus_scan, ai_chat, system_config, vault_api, public_api, task_api, notification_api, shop_api
 # Standard API routes
 app.include_router(vault_api.router, prefix="/api", tags=["vault"])
 app.include_router(virus_scan.router, prefix="/api/scan", tags=["virus-scan"])
@@ -182,6 +169,9 @@ app.include_router(email_hub.router, prefix="/api/emails", tags=["Emails"])
 app.include_router(prompt_api.router, prefix="/api/prompts", tags=["Prompts"])
 app.include_router(ai_chat.router, prefix="/api/ai", tags=["ai-chat"])
 app.include_router(system_config.router, prefix="/api/system", tags=["system-config"])
+app.include_router(task_api.router, prefix="/api", tags=["tasks"])
+app.include_router(notification_api.router, prefix="/api", tags=["notifications"])
+app.include_router(shop_api.router, prefix="/api", tags=["shop"])
 
 # Game routes
 app.include_router(wordle.router, prefix="/api/games/wordle", tags=["games-wordle"])

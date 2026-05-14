@@ -1,7 +1,10 @@
 <template>
-  <div class="arcade-dashboard-container glass-panel">
+  <div class="arcade-dashboard-container glass-panel" :class="{ 'sidebar-open': isMobileSidebarOpen }">
+    <!-- Mobile Sidebar Backdrop -->
+    <div v-if="isMobileSidebarOpen" class="sidebar-backdrop" @click="isMobileSidebarOpen = false"></div>
+
     <!-- Sidebar Navigation -->
-    <aside class="arcade-sidebar">
+    <aside class="arcade-sidebar" :class="{ 'mobile-open': isMobileSidebarOpen }">
       <div class="arcade-logo">
         <i class="fas fa-gamepad"></i>
         <span>DHQ ARCADE</span>
@@ -40,6 +43,9 @@
     <!-- Main Content Area -->
     <main class="arcade-content">
       <header class="content-header">
+        <button class="mobile-sidebar-toggle" @click="isMobileSidebarOpen = !isMobileSidebarOpen">
+          <i class="fas fa-bars"></i>
+        </button>
         <div class="user-stats-bar glass-panel">
           <div class="stat">
             <span class="label">KPI BALANCE</span>
@@ -141,9 +147,26 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, markRaw, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, markRaw, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiGet, apiPost, kpiBalance, showAlert } from '../../utils/api.js'
+
+// Mobile sidebar state
+const isMobileSidebarOpen = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
+
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updateIsMobile)
+  loadProfile()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobile)
+})
 
 // Game Components
 import WordleGame from './WordleGame.vue'
@@ -274,9 +297,6 @@ const onImageError = (game) => {
 
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
-onMounted(() => {
-  loadProfile()
-})
 </script>
 
 <style scoped>
@@ -694,6 +714,122 @@ onMounted(() => {
 
 .btn-toggle.maint-active:hover {
   background: rgba(245, 158, 11, 0.3);
+}
+
+/* Mobile Adjustments */
+@media (max-width: 1024px) {
+  .user-stats-bar {
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+  }
+  
+  .stat {
+    padding: 0 0.75rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .arcade-dashboard-container {
+    margin: 0.5rem;
+    height: calc(100vh - 80px);
+    border-radius: 16px;
+    flex-direction: column;
+  }
+
+  .arcade-sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    bottom: 0;
+    z-index: 1001;
+    background: var(--bg-primary);
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+    transition: left 0.3s ease;
+  }
+
+  .arcade-sidebar.mobile-open {
+    left: 0;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+  }
+
+  .mobile-sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--glass-bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-right: 1rem;
+  }
+
+  .arcade-content {
+    padding: 1rem;
+  }
+
+  .content-header {
+    margin-bottom: 1rem;
+  }
+
+  .user-stats-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 12px;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .stat {
+    border: none;
+    padding: 0.25rem 0.5rem;
+    flex: 1 1 30%;
+  }
+
+  .stat .value {
+    font-size: 1rem;
+  }
+
+  .games-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+  }
+
+  .game-preview {
+    height: 100px;
+    font-size: 2rem;
+  }
+
+  .game-info {
+    padding: 1rem;
+  }
+
+  .game-info h3 {
+    font-size: 1rem;
+  }
+
+  .game-info p {
+    font-size: 0.75rem;
+    height: 2.2rem;
+  }
+
+  .game-meta {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
 }
 
 /* Transitions */

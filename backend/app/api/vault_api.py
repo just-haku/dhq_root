@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Query, Request
 from fastapi.responses import StreamingResponse
-from app.models.user import User
 from app.api.auth import get_op_user
+from app.models.user import User
 from app.models.vault import VaultFile
 from app.core.vault_crypto import get_vault_cipher, CHUNK_SIZE
+from app.core.security import verify_password, get_password_hash
 from app.core.storage import storage_service
 import os
 import uuid
@@ -239,9 +240,10 @@ async def toggle_vault_star(
 @router.get("/nautilus/source/{file_id}")
 async def download_from_vault(
     file_id: str,
+    request: Request,
     current_user: User = Depends(get_op_user)
 ):
-    """Stream decrypt and download file from Vault"""
+    """Stream decrypt and download file from Vault with Range support for iOS"""
     vfile = VaultFile.objects(id=file_id, owner=current_user, is_deleted=False).first()
     if not vfile:
         raise HTTPException(status_code=404, detail="File not found")
@@ -252,19 +254,49 @@ async def download_from_vault(
     if not os.path.exists(vfile.file_path):
         raise HTTPException(status_code=404, detail="Physical file missing")
     
+    # Range Request Handling
+    range_header = request.headers.get("Range")
+    file_size = vfile.file_size
+    
+    start, end = 0, file_size - 1
+    status_code = 200
+    
+    if range_header and range_header.startswith("bytes="):
+        try:
+            h = range_header.replace("bytes=", "").split("-")
+            if h[0]:
+                start = int(h[0])
+            if len(h) > 1 and h[1]:
+                end = int(h[1])
+            status_code = 206
+        except Exception:
+            pass
+            
+    # Bound check
+    start = max(0, min(start, file_size - 1))
+    end = max(start, min(end, file_size - 1))
+    content_length = end - start + 1
+    
     vfile.last_accessed = datetime.utcnow()
     vfile.save()
     
+    response_headers = {
+        "Content-Disposition": f"inline; filename=\"{vfile.filename}\"",
+        "Accept-Ranges": "bytes",
+        "X-Stream-Type": "Encrypted-Media-Segment",
+        "Cache-Control": "no-cache",
+        "Content-Length": str(content_length),
+    }
+    
+    if status_code == 206:
+        response_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    
     cipher = get_vault_cipher()
     return StreamingResponse(
-        cipher.decrypt_stream(vfile.file_path),
+        cipher.decrypt_stream(vfile.file_path, start=start, end=end),
         media_type=vfile.mime_type,
-        headers={
-            "Content-Disposition": f"inline; filename=\"{vfile.filename}\"",
-            "Accept-Ranges": "bytes",
-            "X-Stream-Type": "Encrypted-Media-Segment",
-            "Cache-Control": "no-cache"
-        }
+        headers=response_headers,
+        status_code=status_code
     )
 
 @router.get("/nautilus/thumbnail/{file_id}")
@@ -371,8 +403,7 @@ async def share_vault_file(
             vfile.public_share_expires = None
             
         if request.password:
-            share_password = hashlib.sha256(request.password.encode()).hexdigest()
-            vfile.share_password = share_password
+            vfile.share_password = get_password_hash(request.password)
         else:
             vfile.share_password = None
             
@@ -406,9 +437,10 @@ async def share_vault_file(
 @router.get("/nautilus/s/{share_id}")
 async def access_shared_vault_file(
     share_id: str,
+    request: Request,
     password: Optional[str] = Query(None)
 ):
-    """Public access to shared encrypted vault file"""
+    """Public access to shared encrypted vault file with Range support"""
     vfile = VaultFile.objects(share_link_id=share_id, is_deleted=False).first()
     if not vfile:
         raise HTTPException(status_code=404, detail="Shared link not found")
@@ -422,8 +454,14 @@ async def access_shared_vault_file(
         if not password:
             return {"status": "password_required", "filename": vfile.filename}
             
-        password_hash = hashlib.sha256(password.encode()).hexdigest()
-        if password_hash != vfile.share_password:
+        pass_valid = False
+        try:
+            pass_valid = verify_password(password, vfile.share_password)
+        except Exception:
+            # Fallback to legacy SHA-256
+            pass_valid = hashlib.sha256(password.encode()).hexdigest() == vfile.share_password
+            
+        if not pass_valid:
             raise HTTPException(status_code=401, detail="Invalid password")
             
     # Success, stream decrypted
@@ -433,22 +471,50 @@ async def access_shared_vault_file(
     if not os.path.exists(vfile.file_path):
         raise HTTPException(status_code=404, detail="Physical file missing")
         
+    file_size = vfile.file_size
+    range_header = request.headers.get("Range")
+    
+    start, end = 0, file_size - 1
+    status_code = 200
+    
+    if range_header and range_header.startswith("bytes="):
+        try:
+            h = range_header.replace("bytes=", "").split("-")
+            if h[0]:
+                start = int(h[0])
+            if len(h) > 1 and h[1]:
+                end = int(h[1])
+            status_code = 206
+        except Exception:
+            pass
+            
+    start = max(0, min(start, file_size - 1))
+    end = max(start, min(end, file_size - 1))
+    content_length = end - start + 1
+    
     vfile.last_accessed = datetime.utcnow()
     vfile.download_count += 1
     vfile.save()
     
     cipher = get_vault_cipher()
-    mask_mime = "video/MP2T" if "video" in vfile.mime_type else "application/octet-stream"
+    mask_mime = "video/MP2T" if "video" in vfile.mime_type else vfile.mime_type
     
+    response_headers = {
+        "Content-Disposition": f"attachment; filename=\"{vfile.filename}\"",
+        "Accept-Ranges": "bytes",
+        "X-Stream-Type": "Encrypted-Media-Segment",
+        "Cache-Control": "no-cache",
+        "Content-Length": str(content_length),
+    }
+    
+    if status_code == 206:
+        response_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+        
     return StreamingResponse(
-        cipher.decrypt_stream(vfile.file_path),
+        cipher.decrypt_stream(vfile.file_path, start=start, end=end),
         media_type=mask_mime,
-        headers={
-            "Content-Disposition": f"attachment; filename=\"{vfile.filename}\"",
-            "X-Content-Type-Options": "nosniff",
-            "X-Stream-Type": "Encrypted-Media-Segment",
-            "Cache-Control": "no-cache"
-        }
+        headers=response_headers,
+        status_code=status_code
     )
 
 @router.post("/nautilus/v/{share_id}")
@@ -461,8 +527,14 @@ async def verify_share_password(
     if not vfile:
         raise HTTPException(status_code=404, detail="Link not found")
         
-    password_hash = hashlib.sha256(request.password.encode()).hexdigest()
-    if password_hash == vfile.share_password:
+    pass_valid = False
+    try:
+        pass_valid = verify_password(request.password, vfile.share_password)
+    except Exception:
+        # Fallback to legacy SHA-256
+        pass_valid = hashlib.sha256(request.password.encode()).hexdigest() == vfile.share_password
+        
+    if pass_valid:
         return {"status": "ok"}
     else:
         raise HTTPException(status_code=401, detail="Invalid password")
@@ -512,4 +584,63 @@ async def rename_vault_file(
         
     vfile.filename = request.new_name
     vfile.save()
-    return {"message": "Renamed successfully", "new_name": vfile.filename}
+import zipfile
+import io
+
+@router.get("/nautilus/zip/{folder_id}")
+async def zip_vault_folder(
+    folder_id: str,
+    current_user: User = Depends(get_op_user)
+):
+    """Zip and download an entire vault folder (decrypted)"""
+    root_folder = VaultFile.objects(id=folder_id, owner=current_user, is_folder=True, is_deleted=False).first()
+    if not root_folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    # Get all items recursively
+    base_path = root_folder.folder_path
+    if base_path == "/":
+        full_virtual_path = f"/{root_folder.filename}"
+    else:
+        full_virtual_path = f"{base_path.rstrip('/')}/{root_folder.filename}"
+
+    # Find all items under this folder
+    from mongoengine import Q
+    all_items = VaultFile.objects(
+        Q(owner=current_user) & 
+        Q(is_deleted=False) &
+        (Q(folder_path=full_virtual_path) | Q(folder_path__startswith=f"{full_virtual_path}/"))
+    )
+
+    zip_buffer = io.BytesIO()
+    cipher = get_vault_cipher()
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for item in all_items:
+            if item.is_folder:
+                # Add empty folder entry
+                rel_base = item.folder_path.replace(full_virtual_path, "").strip("/")
+                zip_path = os.path.join(rel_base, item.filename) if rel_base else item.filename
+                zip_file.writestr(zip_path + "/", "")
+                continue
+            
+            if not os.path.exists(item.file_path):
+                continue
+                
+            # Decrypt and add to zip
+            rel_base = item.folder_path.replace(full_virtual_path, "").strip("/")
+            zip_path = os.path.join(rel_base, item.filename) if rel_base else item.filename
+            
+            # Decrypt in memory
+            try:
+                decrypted_data = b"".join(cipher.decrypt_stream(item.file_path))
+                zip_file.writestr(zip_path, decrypted_data)
+            except Exception as e:
+                print(f"Failed to decrypt {item.filename} for zip: {e}")
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": f"attachment; filename=\"{root_folder.filename}.zip\""}
+    )

@@ -1,7 +1,10 @@
 <template>
-  <div class="nautilus-drive">
+  <div class="nautilus-drive" :class="{ 'sidebar-open': isMobileSidebarOpen }">
+    <!-- Mobile Sidebar Backdrop -->
+    <div v-if="isMobileSidebarOpen" class="sidebar-backdrop" @click="isMobileSidebarOpen = false"></div>
+
     <!-- Left Sidebar: Navigation & Actions -->
-    <aside class="nautilus-sidebar glass-panel">
+    <aside class="nautilus-sidebar glass-panel" :class="{ 'mobile-open': isMobileSidebarOpen }">
       <div class="sidebar-header">
         <div class="sidebar-creation-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
           <button 
@@ -56,7 +59,7 @@
         </ul>
       </nav>
       
-      <div class="sidebar-footer">
+      <div class="sidebar-footer" v-if="!isMobile">
         <div class="nav-item" @click="showSecurityInfo">
           <i class="fas fa-info-circle"></i> Security Info
         </div>
@@ -68,7 +71,11 @@
       
       <!-- Top Bar: Navigation & Tools -->
       <header class="nautilus-topbar glass-panel">
-        <div class="breadcrumbs">
+        <div class="topbar-left-actions">
+          <button class="mobile-sidebar-toggle" @click="isMobileSidebarOpen = !isMobileSidebarOpen">
+            <i class="fas fa-bars"></i>
+          </button>
+          <div class="breadcrumbs">
           <span 
             v-for="(crumb, index) in breadcrumb" 
             :key="index"
@@ -78,6 +85,7 @@
             {{ crumb }}
             <i class="fas fa-chevron-right separator" v-if="index < breadcrumb.length - 1"></i>
           </span>
+        </div>
         </div>
         
         <div class="topbar-tools">
@@ -579,6 +587,12 @@ const searchQuery = ref('')
 const currentPath = ref('/')
 const currentFilter = ref(null) 
 const breadcrumb = ref(['Vault'])
+const isMobileSidebarOpen = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
+
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+}
 
 const showFilters = ref(false)
 const searchFilters = reactive({
@@ -1067,15 +1081,7 @@ const openShareModal = async (originalItem) => {
     
     shareModal.item = item
     // Correctly map access level
-    if (item.access_level === 'only_me' || !item.access_level) {
-      shareModal.accessLevel = 'private'
-    } else if (item.access_level === 'public') {
-      shareModal.accessLevel = 'link'
-    } else if (item.access_level === 'specific_users') {
-      shareModal.accessLevel = 'account'
-    } else {
-      shareModal.accessLevel = 'private'
-    }
+    shareModal.accessLevel = item.access_level || 'private'
     shareModal.permissionLevel = item.permission_level || 'viewer'
     shareModal.expiresHours = null
     shareModal.password = ''
@@ -1340,11 +1346,13 @@ onMounted(() => {
   fetchFiles()
   window.addEventListener('click', closeContextMenu)
   window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('resize', updateIsMobile)
 })
 
 onUnmounted(() => {
   window.removeEventListener('click', closeContextMenu)
   window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('resize', updateIsMobile)
 })
 </script>
 
@@ -1443,6 +1451,26 @@ onUnmounted(() => {
   flex-shrink: 0;
   position: relative;
   z-index: 60;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobile-sidebar-toggle {
+  display: none;
+  background: var(--glass-bg-hover);
+  border: 1px solid var(--glass-border);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.topbar-left-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .sidebar-nav {
@@ -2365,4 +2393,73 @@ onUnmounted(() => {
 .text-success { color: #10b981; }
 .text-danger { color: #ef4444; }
 
+/* Responsive Media Queries */
+@media (max-width: 1024px) {
+  .search-box {
+    width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .nautilus-drive {
+    padding: 0.5rem;
+    gap: 0;
+  }
+
+  .nautilus-sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    bottom: 0;
+    height: 100vh;
+    border-radius: 0 1.5rem 1.5rem 0;
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+    background: var(--bg-primary); /* solid bg for better readability */
+  }
+
+  .nautilus-sidebar.mobile-open {
+    left: 0;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 55;
+  }
+
+  .mobile-sidebar-toggle {
+    display: flex;
+  }
+
+  .nautilus-topbar {
+    padding: 0 1rem;
+    height: 60px;
+  }
+
+  .search-box {
+    display: none; /* Hide search box on tiny screens, or make it expand */
+  }
+
+  .breadcrumbs {
+    font-size: 0.9rem;
+  }
+
+  .view-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 1rem;
+  }
+
+  .grid-item {
+    padding: 1rem 0.5rem;
+  }
+
+  .item-name {
+    font-size: 0.8rem;
+  }
+}
 </style>

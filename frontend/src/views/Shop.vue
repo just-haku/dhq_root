@@ -492,9 +492,16 @@ onMounted(async () => {
 
 .balance-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
   flex: 1;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .balance-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .compact-balance {
@@ -579,11 +586,19 @@ onMounted(async () => {
 
 .shop-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.5rem;
   transition: all 0.5s ease;
   padding: 10px;
   border-radius: 20px;
+}
+
+@media (max-width: 640px) {
+  .shop-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 5px;
+  }
 }
 
 .shop-grid.highlight {
@@ -773,19 +788,38 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .shop-categories {
     padding-bottom: 1rem;
+    margin-bottom: 1rem;
   }
   
   .shop-grid {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 1rem;
+    padding: 0;
+  }
+
+  .item-badge {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.65rem;
   }
   
   .item-info {
     padding: 1rem;
   }
   
+  .item-info h3 {
+    font-size: 1rem;
+  }
+
+  .item-description {
+    font-size: 0.8rem;
+    margin-bottom: 0.75rem;
+  }
+
   .item-actions {
     flex-direction: column;
+    padding: 0 1rem 1.5rem;
+  }
+
+  .balance-grid {
+    margin-bottom: 0.5rem;
   }
 }
 </style>

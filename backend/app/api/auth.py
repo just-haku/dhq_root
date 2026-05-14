@@ -90,22 +90,22 @@ async def login(request: LoginRequest):
     }
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    token: Optional[str] = Query(None)
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
-    """Get current user from JWT token (supports both Authorization header and 'token' query param)"""
+    """Get current user from JWT token (Authorization header only)"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    # Get token from header or query param
     auth_token = None
     if credentials:
         auth_token = credentials.credentials
-    elif token:
-        auth_token = token
+    else:
+        # Fallback for media endpoints (images/video) that browser tags don't easily send headers for
+        auth_token = request.query_params.get("token")
         
     if not auth_token:
         raise credentials_exception

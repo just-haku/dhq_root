@@ -7,9 +7,11 @@ from app.models.user import User
 from app.models.file import EncryptedFile
 from app.models.arcade import UserArcadeProfile
 from app.models.collaboration import Collaboration
+from app.models.drive import DriveQuota
 from app.api.auth import get_op_user
 from app.services.email_service import email_service
 from app.core.security import generate_otp, verify_password, hash_password
+from app.core.notifications import send_notification
 import os
 import shutil
 from datetime import datetime
@@ -41,6 +43,10 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     role: Optional[str] = None
     status: Optional[str] = None
+
+class UpdateQuotaRequest(BaseModel):
+    total_quota: Optional[int] = None # in GB
+    additional_quota: Optional[int] = None # in GB
 
 @router.get("/users")
 async def get_users(current_user: User = Depends(get_op_user)):
@@ -106,7 +112,14 @@ async def update_user(
             user.role = request.role
         
         if request.status is not None:
+            old_status = user.status
             user.status = request.status
+            if old_status == 'PENDING' and request.status == 'ACTIVE':
+                asyncio.create_task(send_notification(
+                    user_id=user.username,
+                    message="Your account has been approved! Welcome to DHQ.",
+                    n_type="SYSTEM"
+                ))
         
         user.save()
         
@@ -150,6 +163,60 @@ async def delete_user(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
+
+@router.get("/users/pending")
+async def get_pending_users(current_user: User = Depends(get_op_user)):
+    """Get all users waiting for approval"""
+    users = User.objects(status='PENDING').order_by('-created_at')
+    return [
+        {
+            "id": str(user.id),
+            "username": user.username,
+            "role": user.role,
+            "status": user.status,
+            "created_at": user.created_at.isoformat()
+        }
+        for user in users
+    ]
+
+@router.get("/users/{user_id}/quota")
+async def get_user_quota(user_id: str, current_user: User = Depends(get_op_user)):
+    """Get a user's drive quota"""
+    user = User.objects(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    quota = DriveQuota.objects(user=user).first()
+    if not quota:
+        # Create default quota if missing
+        quota = DriveQuota(user=user)
+        quota.save()
+        
+    return quota.to_dict()
+
+@router.put("/users/{user_id}/quota")
+async def update_user_quota(
+    user_id: str, 
+    request: UpdateQuotaRequest,
+    current_user: User = Depends(get_op_user)
+):
+    """Update a user's drive quota"""
+    user = User.objects(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    quota = DriveQuota.objects(user=user).first()
+    if not quota:
+        quota = DriveQuota(user=user)
+        
+    if request.total_quota is not None:
+        quota.total_quota = request.total_quota * 1024 * 1024 * 1024
+    
+    if request.additional_quota is not None:
+        quota.additional_quota = request.additional_quota * 1024 * 1024 * 1024
+        
+    quota.save()
+    return {"message": "Quota updated", "quota": quota.to_dict()}
 
 @router.get("/stats/overview")
 async def get_overview_stats(current_user: User = Depends(get_op_user)):

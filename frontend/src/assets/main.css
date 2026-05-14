@@ -164,10 +164,19 @@
   box-sizing: border-box;
 }
 
-/* GPU Optimization: Disable heavy backdrop filters globally */
-* {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+/* GPU Optimization: Disable heavy backdrop filters on mobile devices by default */
+@media (max-width: 768px) {
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Enable glassmorphism ONLY on non-mobile static panels */
+.glass-static {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 body {
@@ -286,12 +295,17 @@ textarea:focus {
 /* Global Liquid Glass Classes */
 .glass-panel {
   background: var(--glass-bg-primary);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   box-shadow: var(--glass-shadow);
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+@media (min-width: 769px) {
+  .glass-panel {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
 }
 
 .glass-panel:hover {
@@ -302,13 +316,18 @@ textarea:focus {
 
 .glass-card {
   background: var(--glass-bg-secondary);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: var(--glass-shadow);
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease;
+}
+
+@media (min-width: 769px) {
+  .glass-card {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
 }
 
 /* Typography Enhancements */

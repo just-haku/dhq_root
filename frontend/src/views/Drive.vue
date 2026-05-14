@@ -1,7 +1,10 @@
 <template>
-  <div class="nautilus-drive">
+  <div class="nautilus-drive" :class="{ 'sidebar-open': isMobileSidebarOpen }">
+    <!-- Mobile Sidebar Backdrop -->
+    <div v-if="isMobileSidebarOpen" class="sidebar-backdrop" @click="isMobileSidebarOpen = false"></div>
+    
     <!-- Left Sidebar: Navigation & Actions -->
-    <aside class="nautilus-sidebar glass-panel">
+    <aside class="nautilus-sidebar glass-panel" :class="{ 'mobile-open': isMobileSidebarOpen }">
       <div class="sidebar-header">
         <div class="sidebar-creation-group">
           <!-- New Folder Button -->
@@ -84,7 +87,11 @@
       
       <!-- Top Bar: Navigation & Tools -->
       <header class="nautilus-topbar glass-panel">
-        <div class="breadcrumbs">
+        <div class="topbar-left-actions">
+           <button class="mobile-sidebar-toggle" @click="isMobileSidebarOpen = !isMobileSidebarOpen">
+             <i class="fas fa-bars"></i>
+           </button>
+           <div class="breadcrumbs">
           <span 
             v-for="(crumb, index) in breadcrumb" 
             :key="index"
@@ -94,6 +101,7 @@
             {{ crumb }}
             <i class="fas fa-chevron-right separator" v-if="index < breadcrumb.length - 1"></i>
           </span>
+        </div>
         </div>
         
         <div class="topbar-tools">
@@ -770,6 +778,13 @@ const viewMode = ref('grid')
 const selectedFiles = ref([])
 const currentPath = ref('/')
 const currentFilter = ref(null) 
+const isMobileSidebarOpen = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
+
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+
 const showFilters = ref(false)
 const searchQuery = ref('')
 const searchFilters = reactive({
@@ -2070,6 +2085,26 @@ onUnmounted(() => {
   flex-shrink: 0;
   position: relative;
   z-index: 60;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobile-sidebar-toggle {
+  display: none;
+  background: var(--glass-bg-hover);
+  border: 1px solid var(--glass-border);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.topbar-left-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .sidebar-header {
@@ -3193,9 +3228,84 @@ input:checked + .toggle-slider:before {
   width: fit-content;
 }
 
+@media (max-width: 1024px) {
+  .search-box {
+    width: 200px;
+  }
+}
+
 @media (max-width: 768px) {
   .nautilus-drive {
-    flex-direction: column;
+    padding: 0.5rem;
+    gap: 0;
+  }
+
+  .nautilus-sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    bottom: 0;
+    height: 100vh;
+    border-radius: 0 1.5rem 1.5rem 0;
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+    background: var(--bg-primary); 
+    z-index: 1002;
+  }
+
+  .nautilus-sidebar.mobile-open {
+    left: 0;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1001;
+  }
+
+  .mobile-sidebar-toggle {
+    display: flex;
+  }
+
+  .nautilus-topbar {
+    padding: 0 1rem;
+    height: 60px;
+  }
+
+  .search-box {
+    display: none; 
+  }
+
+  .breadcrumbs {
+    font-size: 0.9rem;
+  }
+
+  .view-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 1rem;
+  }
+
+  .grid-item {
+    padding: 1rem 0.5rem;
+  }
+
+  .item-name {
+    font-size: 0.8rem;
+  }
+
+  .nautilus-details {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    z-index: 1005;
+    border-radius: 0;
   }
 }
 </style>

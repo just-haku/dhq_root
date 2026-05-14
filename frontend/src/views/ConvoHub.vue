@@ -1,7 +1,10 @@
 <template>
-  <div class="convo-hub-container glass-panel">
+  <div class="convo-hub-container glass-panel" :class="{ 'sidebar-open': isMobileSidebarOpen }">
+    <!-- Mobile Sidebar Backdrop -->
+    <div v-if="isMobileSidebarOpen" class="sidebar-backdrop" @click="isMobileSidebarOpen = false"></div>
+
     <!-- Conversations Sidebar -->
-    <div class="convo-sidebar">
+    <div class="convo-sidebar" :class="{ 'mobile-open': isMobileSidebarOpen }">
       <div class="sidebar-header">
         <h2>Chats</h2>
         <div class="header-actions">
@@ -84,9 +87,15 @@
     </div>
 
     <!-- Active Chat Area -->
-    <div class="chat-main">
+    <div class="chat-main" :class="{ 'mobile-hidden': !activeChatId && isMobile }">
       <template v-if="activeChat">
         <div class="chat-header">
+          <button v-if="isMobile" class="back-btn" @click="activeChatId = null; isAIChat = false">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <button v-else-if="isMobile" class="mobile-sidebar-toggle" @click="isMobileSidebarOpen = !isMobileSidebarOpen">
+            <i class="fas fa-bars"></i>
+          </button>
           <div class="chat-header-user">
             <div class="avatar-circle-small" :class="isAIChat ? 'ai-header-avatar' : ''">
               <img v-if="isAIChat" src="/ai_avatar.png" class="w-full h-full object-cover" />
@@ -321,8 +330,19 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
+
+// Mobile state
+const isMobileSidebarOpen = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
+
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) isMobileSidebarOpen.value = false
+}
+
 import { apiGet, apiPost } from '@/utils/api.js'
 import { useUserStore } from '@/stores/userStore.js'
+import { throttle } from '@/utils/throttle'
 import { io } from 'socket.io-client'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
@@ -711,6 +731,9 @@ const createNewChat = () => {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', updateIsMobile)
+  updateIsMobile()
+  const userStore = useUserStore()
   await fetchRooms()
   await fetchAISessions()
   
@@ -726,10 +749,10 @@ onMounted(async () => {
       console.warn("Socket.IO queue connection bypassed.");
   });
   
-  socket.on('ai_queue_status', (data) => {
+  socket.on('ai_queue_status', throttle((data) => {
       if (data.status === 'processing') queuePosition.value = 0;
       else if (data.position) queuePosition.value = data.position;
-  });
+  }, 1000));
 
   if (chats.value.length > 0 && !activeChatId.value) {
     selectChat(chats.value[0])
@@ -737,6 +760,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+    window.removeEventListener('resize', updateIsMobile)
     if (socket) socket.disconnect();
 })
 </script>
@@ -828,12 +852,102 @@ onUnmounted(() => {
   display: flex;
   height: calc(100vh - 120px);
   overflow: hidden;
-  border-radius: 1.5rem;
+  margin: 1rem;
+  border-radius: 12px;
   background: var(--glass-bg-primary);
   border: 1px solid var(--glass-border);
 }
 
-/* Sidebar */
+@media (max-width: 768px) {
+  .convo-hub-container {
+    margin: 0;
+    height: calc(100vh - 60px);
+    border-radius: 0;
+    position: relative;
+    border: none;
+  }
+
+  .convo-sidebar {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    z-index: 1001;
+    background: var(--bg-primary);
+    transition: left 0.3s ease;
+    border-right: none !important;
+  }
+
+  .convo-sidebar.mobile-open {
+    left: 0;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+  }
+
+  .chat-main {
+    width: 100%;
+    border-left: none !important;
+  }
+
+  .chat-main.mobile-hidden {
+    display: none;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-right: 0.5rem;
+    font-size: 1.2rem;
+  }
+
+  .mobile-sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--glass-bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-left: 0.5rem;
+  }
+
+  .chat-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .messages-container {
+    padding: 1rem;
+  }
+
+  .message {
+    max-width: 85%;
+  }
+
+  .input-area {
+    padding: 1rem;
+  }
+}
+
 .convo-sidebar {
   width: 360px;
   border-right: 1px solid var(--glass-border);

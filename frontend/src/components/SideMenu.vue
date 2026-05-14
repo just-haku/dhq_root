@@ -24,7 +24,8 @@
         </div>
         
         <div class="user-card-content cursor-pointer" @click="navigate('/profile')">
-          <div class="user-avatar-wrapper">
+          <div class="user-avatar-wrapper" :class="{ 'has-frame': userStore.equippedItems?.avatar_frame }">
+            <div v-if="userStore.equippedItems?.avatar_frame" class="avatar-frame-overlay" :style="{ backgroundImage: `url(${userStore.equippedItems.avatar_frame})` }"></div>
             <div class="avatar-circle flex items-center justify-center overflow-hidden">
               <img v-if="avatarUrl" :src="avatarUrl" class="avatar-img" />
               <span v-else class="text-white text-xl font-bold">{{ initials }}</span>
@@ -33,6 +34,7 @@
           
           <div class="user-details">
             <h3 class="display-name">{{ displayName || 'Guest User' }}</h3>
+            <p v-if="userStore.title" class="user-title">{{ userStore.title }}</p>
             <div class="user-badges">
               <span class="role-badge" :class="roleClass">{{ user?.role || 'USER' }}</span>
               <span class="currency-badges flex gap-2">
@@ -189,14 +191,14 @@ const userRoutes = computed(() => [
   { name: t('sidebar.collaboration'), icon: 'fas fa-users-cog', path: '/collaboration' },
   { name: t('sidebar.order_center'), icon: 'fas fa-box', path: '/order-center' },
   { name: t('sidebar.cnc'), icon: 'fas fa-drafting-compass', path: '/gcode-generator' },
-  { name: t('sidebar.task_center'), icon: 'fas fa-tasks', path: '#' },
+  { name: t('sidebar.task_center'), icon: 'fas fa-tasks', path: '/tasks' },
   { name: t('sidebar.email'), icon: 'fas fa-envelope-open-text', path: '/email-hub' },
   { name: t('sidebar.chat'), icon: 'fas fa-comments', path: '/convo-hub' },
   { name: t('sidebar.shop'), icon: 'fas fa-shopping-cart', path: '/shop' },
   { name: t('sidebar.arcade'), icon: 'fas fa-gamepad', path: '/arcade' },
-  { name: t('sidebar.notification_center'), icon: 'fas fa-bell', path: '#' },
+  { name: t('sidebar.notification_center'), icon: 'fas fa-bell', path: '/notifications' },
   { name: t('sidebar.settings'), icon: 'fas fa-user-cog', path: '/settings' },
-  { name: t('sidebar.personalize'), icon: 'fas fa-paint-brush', path: '#' },
+  { name: t('sidebar.personalize'), icon: 'fas fa-paint-brush', path: '/profile#personalize' },
   { name: t('sidebar.scan_virus'), icon: 'fas fa-shield-virus', path: '/virus-scan' },
   { name: t('sidebar.daily_gift'), icon: 'fas fa-gift', path: '/daily-gifts' }
 ])
@@ -208,11 +210,11 @@ const adRoutes = computed(() => [
 ])
 
 const opRoutes = computed(() => [
-  { name: t('sidebar.manage_role'), icon: 'fas fa-user-shield', path: '#' },
+  { name: t('sidebar.manage_role'), icon: 'fas fa-user-shield', path: '/admin/users' },
   { name: t('sidebar.vault'), icon: 'fas fa-shield-halved', path: '/vault' },
-  { name: t('sidebar.manage_quotas'), icon: 'fas fa-database', path: '#' },
+  { name: t('sidebar.manage_quotas'), icon: 'fas fa-database', path: '/admin/users' },
   { name: t('sidebar.nuke_data'), icon: 'fas fa-bomb', path: '/nuke-data' },
-  { name: t('sidebar.manage_shop'), icon: 'fas fa-store-alt', path: '#' },
+  { name: t('sidebar.manage_shop'), icon: 'fas fa-store-alt', path: '/admin/shop' },
   { name: t('sidebar.working_mode'), icon: 'fas fa-bolt', path: '/operator/working-mode' },
   { name: t('sidebar.admin_config'), icon: 'fas fa-cogs', path: '/operator/server-settings' },
   { name: t('sidebar.manage_gifts'), icon: 'fas fa-box-open', path: '/manage-gifts' },
@@ -310,6 +312,22 @@ const opRoutes = computed(() => [
   flex-shrink: 0;
 }
 
+.user-avatar-wrapper.has-frame {
+  padding: 10px;
+}
+
+.avatar-frame-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  z-index: 2;
+  pointer-events: none;
+}
+
 .avatar-img {
   width: 100%;
   height: 100%;
@@ -338,6 +356,16 @@ const opRoutes = computed(() => [
   text-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
   margin: 0 0 0.5rem 0;
   line-height: 1.1;
+}
+
+.user-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #3b82f6; /* var(--primary-color) fallback */
+  margin-top: -0.25rem;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .user-badges {
@@ -509,5 +537,82 @@ const opRoutes = computed(() => [
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--glass-border-hover);
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+  .side-menu {
+    width: 280px;
+    left: -290px;
+  }
+
+  .side-menu.is-open {
+    transform: translateX(290px);
+  }
+
+  .user-card {
+    height: 180px;
+  }
+
+  .user-card-content {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .user-avatar-wrapper {
+    width: 60px;
+    height: 60px;
+  }
+
+  .display-name {
+    font-size: 1.2rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .user-badges {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .currency-badges {
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  .kpi-badge-small, .chips-badge-small, .api-dollar-badge-small {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.65rem;
+  }
+
+  .nav-routes-container {
+    padding: 0.75rem;
+  }
+
+  .nav-link {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .nav-routes-container.layout-grid .route-section .route-list {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .nav-routes-container.layout-grid .nav-link {
+    padding: 0.75rem 0.4rem;
+  }
+
+  .nav-routes-container.layout-grid .nav-link i {
+    font-size: 1.2rem;
+  }
+
+  .logout-section {
+    padding: 1rem;
+  }
+
+  .menu-trigger {
+    width: 36px;
+    height: 36px;
+  }
 }
 </style>

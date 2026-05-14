@@ -1453,7 +1453,31 @@ const showToast = (message, type = 'success') => {
 
 @media (max-width: 1024px) {
   .preview-row, .settings-row {
+    grid-template-columns: 1fr;
+    display: flex;
     flex-direction: column;
+  }
+  
+  .preview-card, .settings-card {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .gcode-generator {
+    padding: 1rem;
+  }
+  
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .preview-row {
+    gap: 1rem;
+  }
+  
+  .settings-row {
+    gap: 1rem;
   }
 }
 

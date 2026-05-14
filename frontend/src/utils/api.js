@@ -170,7 +170,10 @@ export function apiRequest(endpoint, options = {}) {
   }).then(async response => {
     if (!response.ok) {
       if (response.status === 401) {
-        handleAuthError()
+        // Only redirect if not already on root/login page to prevent loops
+        if (window.location.pathname !== '/' && !window.location.pathname.includes('shadow-garden')) {
+          handleAuthError()
+        }
       }
 
       let errorMessage = `HTTP error! status: ${response.status}`

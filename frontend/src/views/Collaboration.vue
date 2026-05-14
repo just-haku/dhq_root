@@ -936,6 +936,12 @@ onMounted(() => {
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.filter-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .filter-tabs button {
@@ -1008,6 +1014,8 @@ onMounted(() => {
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 600;
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .status.On.Going {
@@ -1349,6 +1357,61 @@ onMounted(() => {
     flex-direction: column;
     gap: 1rem;
     align-items: stretch;
+  }
+
+  .filter-tabs {
+    gap: 0.5rem;
+    padding: 0.3rem;
+  }
+
+  .filter-tabs button {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .collaboration-card {
+    padding: 1rem;
+  }
+
+  .collab-header {
+    margin-bottom: 0.75rem;
+  }
+
+  .collab-info h3 {
+    font-size: 1.1rem;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .collab-meta {
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+
+  .collab-meta span {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+  }
+
+  .collab-details {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .videos-progress {
+    gap: 0.5rem;
+  }
+
+  .videos-progress span {
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .collab-actions {
+    justify-content: flex-end;
   }
   
   .form-grid {

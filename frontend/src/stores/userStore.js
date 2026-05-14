@@ -45,10 +45,23 @@ export const useUserStore = defineStore('user', () => {
     const avatarUrl = computed(() => user.value?.avatar_url || '')
     const bannerUrl = computed(() => user.value?.banner_url || '')
     const role = computed(() => user.value?.role || 'USER')
+    const equippedItems = computed(() => user.value?.equipped_items || {})
+    const title = computed(() => equippedItems.value?.title || '')
     const activeTheme = computed(() => user.value?.active_theme || 'dark')
     const unlockedThemes = computed(() => user.value?.unlocked_themes || ['dark', 'light'])
     const sideMenuLayout = computed(() => user.value?.side_menu_layout || 'list')
-    const isSingleClickOpen = computed(() => user.value?.is_single_click_open || false)
+    const isSingleClickOpen = computed(() => user.value?.side_menu_layout || 'list')
+    const unreadCount = ref(0)
+
+    const fetchUnreadCount = async () => {
+        try {
+            const { apiGet } = await import('@/utils/api')
+            const response = await apiGet('/notifications/unread/count')
+            if (response && response.count !== undefined) {
+                unreadCount.value = response.count
+            }
+        } catch (error) { }
+    }
 
     return {
         user,
@@ -65,6 +78,10 @@ export const useUserStore = defineStore('user', () => {
         activeTheme,
         unlockedThemes,
         sideMenuLayout,
-        isSingleClickOpen
+        isSingleClickOpen,
+        equippedItems,
+        title,
+        unreadCount,
+        fetchUnreadCount
     }
 })

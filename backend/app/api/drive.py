@@ -970,12 +970,15 @@ async def get_drive_file_metadata(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
         
-    # Check permissions
-    if item.owner != current_user and current_user.role != "OP":
-        # Check if shared with user
-        share = DriveFileShare.objects(file=item, user=current_user).first()
-        if not share and item.access_level != "public":
-             raise HTTPException(status_code=403, detail="Access denied")
+    # Check permissions (Owner, OP, or shared)
+    is_owner = str(item.owner.id) == str(current_user.id)
+    is_op = current_user.role == "OP"
+    is_shared = any(str(share.shared_with.id) == str(current_user.id) for share in item.shares) if item.shares else False
+    is_allowed = any(str(u.id) == str(current_user.id) for u in item.allowed_users) if item.allowed_users else False
+    is_public = item.access_level == "public"
+
+    if not (is_owner or is_op or is_shared or is_allowed or is_public):
+        raise HTTPException(status_code=403, detail="Access denied")
              
     return item.to_dict()
 

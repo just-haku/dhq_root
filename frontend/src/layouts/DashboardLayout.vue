@@ -25,9 +25,9 @@
           <i class="fas fa-coins text-warning"></i>
           <span>{{ kpiBalance }}</span>
         </div>
-        <div class="notification-bell">
+        <div class="notification-bell" @click="router.push('/notifications')">
           <i class="fas fa-bell"></i>
-          <span class="notification-dot"></span>
+          <span class="notification-dot" v-if="userStore.unreadCount > 0"></span>
         </div>
         <div class="user-profile-wrapper" ref="userDropdownRef">
           <div class="user-info" @click="toggleUserDropdown">
@@ -136,11 +136,26 @@ const avatarUrl = computed(() => userStore.avatarUrl)
 onMounted(() => {
   userStore.init()
   systemStore.init()
+  
+  // Only fetch unread count if authenticated to avoid 401 redirect loops
+  if (localStorage.getItem('token')) {
+    userStore.fetchUnreadCount()
+    
+    // Refresh unread count every 60 seconds
+    const interval = setInterval(() => {
+      userStore.fetchUnreadCount()
+    }, 60000)
+    
+    onUnmounted(() => {
+      clearInterval(interval)
+    })
+  }
+  
   document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+  
+  onUnmounted(() => {
+    document.removeEventListener('click', handleClickOutside)
+  })
 })
 
 const initials = computed(() => {
@@ -232,13 +247,18 @@ const initials = computed(() => {
 
 .notification-bell {
   position: relative;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.2s;
-  padding: 0.5rem;
+  transition: all 0.2s;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: var(--glass-bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg-secondary);
+  border: 1px solid var(--glass-border);
 }
 
 .notification-bell:hover {
