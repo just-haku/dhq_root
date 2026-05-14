@@ -141,6 +141,93 @@
       <JobComposer job-type="strategic_synthesis" priority="normal" :toggles="analysisToggles" @submit="enqueueJob" />
     </section>
 
+    <section v-if="activeTab === 'ontology'" class="ci-section">
+      <div class="section-title">
+        <h2>Ontology Registry</h2>
+        <span>{{ ontologyRegistries.length }} canonical domains</span>
+      </div>
+      <div class="ontology-grid">
+        <article v-for="registry in ontologyRegistries" :key="registry.domain" class="ontology-panel">
+          <div class="panel-heading">
+            <strong>{{ registry.domain.replaceAll('_', ' ') }}</strong>
+            <span>{{ registry.label_count }} labels</span>
+          </div>
+          <div class="label-list">
+            <span v-for="label in registry.labels" :key="label.id" class="ontology-label" :title="label.description">
+              {{ label.id }}
+            </span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section v-if="activeTab === 'explainability'" class="ci-section split">
+      <div>
+        <div class="section-title">
+          <h2>Lineage & Evidence</h2>
+          <span>Inspectable recommendations</span>
+        </div>
+        <div class="explain-list">
+          <article v-for="job in jobs.slice(0, 8)" :key="`e-${job.job_id}`" class="explain-row">
+            <strong>{{ job.job_type }}</strong>
+            <span>{{ job.trace_id || job.job_id }}</span>
+            <small>{{ evidenceCount(job) }} evidence refs / {{ Object.keys(job.result || {}).length }} result fields</small>
+          </article>
+        </div>
+      </div>
+      <div>
+        <div class="section-title">
+          <h2>Semantic Consensus</h2>
+          <span>{{ consensusRecords.length }} records</span>
+        </div>
+        <div class="explain-list">
+          <article v-for="item in consensusRecords" :key="item.consensus_id" class="explain-row">
+            <strong>{{ item.resolution }}</strong>
+            <span>{{ Math.round((item.agreement_score || 0) * 100) }}% agreement</span>
+            <small>{{ (item.disagreements || []).length }} disagreements</small>
+          </article>
+          <p v-if="consensusRecords.length === 0" class="empty-state">No semantic consensus records yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="activeTab === 'feedback'" class="ci-section split">
+      <div>
+        <div class="section-title">
+          <h2>Human Feedback</h2>
+          <span>Reinforcement memory boundary</span>
+        </div>
+        <div class="feedback-form">
+          <select v-model="feedbackForm.feedback_type">
+            <option value="confirm_recommendation">Confirm recommendation</option>
+            <option value="reject_interpretation">Reject interpretation</option>
+            <option value="label_resonance">Label resonance</option>
+            <option value="performance_mismatch">Performance mismatch</option>
+            <option value="manual_override">Manual override</option>
+          </select>
+          <input v-model="feedbackForm.target_ref.ref_id" placeholder="Target ref id" />
+          <label class="check-line">
+            Rating
+            <input type="range" min="-1" max="1" step="0.1" v-model.number="feedbackForm.rating" />
+            <span>{{ feedbackForm.rating.toFixed(1) }}</span>
+          </label>
+          <textarea v-model="feedbackForm.comment" rows="3" placeholder="Correction, confirmation, or performance note."></textarea>
+          <button class="primary-btn" @click="submitFeedback">
+            <i class="fas fa-check"></i>
+            Record Feedback
+          </button>
+        </div>
+      </div>
+      <div class="explain-list">
+        <article v-for="event in feedbackEvents" :key="event.event_id" class="explain-row">
+          <strong>{{ event.feedback_type.replaceAll('_', ' ') }}</strong>
+          <span>{{ event.target_ref?.ref_id }}</span>
+          <small>{{ event.comment || 'No comment' }}</small>
+        </article>
+        <p v-if="feedbackEvents.length === 0" class="empty-state">No feedback events yet.</p>
+      </div>
+    </section>
+
     <section v-if="activeTab === 'audience'" class="ci-section">
       <div class="section-title">
         <h2>Audience Psychology</h2>
@@ -191,6 +278,50 @@
           <span>{{ worker.machine_role }}</span>
           <span class="status-pill" :class="worker.status">{{ worker.status }}</span>
           <span>{{ compactCapabilities(worker.capabilities) }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="activeTab === 'stability'" class="ci-section split">
+      <div>
+        <div class="section-title">
+          <h2>Resource Pressure</h2>
+          <span>{{ pressureSnapshots.length }} snapshots</span>
+        </div>
+        <div class="explain-list">
+          <article v-for="snapshot in pressureSnapshots" :key="snapshot.id" class="pressure-row">
+            <div>
+              <strong>{{ snapshot.worker_id }}</strong>
+              <span>{{ snapshot.thermal_state }}</span>
+            </div>
+            <meter min="0" max="1" :value="snapshot.gpu_pressure || 0"></meter>
+            <small>{{ snapshot.scheduling?.reason || 'unclassified' }}</small>
+          </article>
+          <p v-if="pressureSnapshots.length === 0" class="empty-state">No resource pressure snapshots yet.</p>
+        </div>
+      </div>
+      <div>
+        <div class="section-title">
+          <h2>Default Policies</h2>
+          <span>Deterministic guardrails</span>
+        </div>
+        <div class="policy-grid">
+          <div class="metric-tile">
+            <span>High confidence</span>
+            <strong>{{ formatPercent(policyDefaults.confidence?.high_confidence_threshold) }}</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Reasoning depth</span>
+            <strong>{{ policyDefaults.reasoning_depth?.max_reasoning_depth || 0 }}</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Trend 14d weight</span>
+            <strong>{{ formatPercent(policyDefaults.temporal_weights?.trend_14_days) }}</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Identity 14d weight</span>
+            <strong>{{ formatPercent(policyDefaults.temporal_weights?.creator_identity_14_days) }}</strong>
+          </div>
         </div>
       </div>
     </section>
@@ -247,11 +378,15 @@ const tabs = [
   { key: 'draft', label: 'Draft Critic', icon: 'fas fa-pen-nib' },
   { key: 'chat', label: 'AI Chat with Gemma', icon: 'fas fa-comments' },
   { key: 'strategy', label: 'Strategy Planner', icon: 'fas fa-chess' },
+  { key: 'ontology', label: 'Ontology Registry', icon: 'fas fa-tags' },
+  { key: 'explainability', label: 'Explainability', icon: 'fas fa-sitemap' },
+  { key: 'feedback', label: 'Human Feedback', icon: 'fas fa-user-check' },
   { key: 'audience', label: 'Audience Psychology', icon: 'fas fa-users-viewfinder' },
   { key: 'embeddings', label: 'Embedding Maps', icon: 'fas fa-project-diagram' },
   { key: 'hooks', label: 'Hook Explorer', icon: 'fas fa-fish-hook' },
   { key: 'memory', label: 'Memory Graph', icon: 'fas fa-diagram-project' },
   { key: 'workers', label: 'Worker Management', icon: 'fas fa-network-wired' },
+  { key: 'stability', label: 'Stability Layer', icon: 'fas fa-shield-alt' },
   { key: 'queues', label: 'Queue Monitor', icon: 'fas fa-stream' },
   { key: 'models', label: 'Local Model Manager', icon: 'fas fa-microchip' }
 ]
@@ -265,9 +400,22 @@ const jobs = ref([])
 const models = ref([])
 const memory = ref([])
 const creators = ref([])
+const ontology = ref({})
+const feedbackEvents = ref([])
+const consensusRecords = ref([])
+const pressureSnapshots = ref([])
+const policyDefaults = ref({})
 const workerToken = ref('')
 const validateHashes = ref(false)
 const chatPrompt = ref('')
+const feedbackForm = ref({
+  feedback_type: 'confirm_recommendation',
+  target_ref: { ref_type: 'recommendation', ref_id: '' },
+  rating: 0,
+  comment: ''
+})
+
+const ontologyRegistries = computed(() => Object.values(ontology.value || {}))
 
 const analysisToggles = ref({
   ocr_timeline: true,
@@ -285,14 +433,32 @@ const analysisToggles = ref({
 async function refreshAll() {
   loading.value = true
   try {
-    const [overviewRes, workersRes, queuesRes, jobsRes, modelsRes, memoryRes, creatorsRes] = await Promise.all([
+    const [
+      overviewRes,
+      workersRes,
+      queuesRes,
+      jobsRes,
+      modelsRes,
+      memoryRes,
+      creatorsRes,
+      ontologyRes,
+      feedbackRes,
+      consensusRes,
+      pressureRes,
+      policiesRes
+    ] = await Promise.all([
       apiGet('/creator-intelligence/overview'),
       apiGet('/creator-intelligence/workers'),
       apiGet('/creator-intelligence/queues'),
       apiGet('/creator-intelligence/jobs?limit=50'),
       apiGet('/creator-intelligence/models'),
       apiGet('/creator-intelligence/memory?limit=100'),
-      apiGet('/creator-intelligence/creators')
+      apiGet('/creator-intelligence/creators'),
+      apiGet('/creator-intelligence/ontology'),
+      apiGet('/creator-intelligence/feedback?limit=30'),
+      apiGet('/creator-intelligence/consensus?limit=30'),
+      apiGet('/creator-intelligence/pressure?limit=30'),
+      apiGet('/creator-intelligence/policies/defaults')
     ])
     overview.value = overviewRes
     workers.value = workersRes.workers || []
@@ -301,6 +467,11 @@ async function refreshAll() {
     models.value = modelsRes.models || []
     memory.value = memoryRes.memory || []
     creators.value = creatorsRes.creators || []
+    ontology.value = ontologyRes.registries || {}
+    feedbackEvents.value = feedbackRes.feedback || []
+    consensusRecords.value = consensusRes.consensus || []
+    pressureSnapshots.value = pressureRes.pressure || []
+    policyDefaults.value = policiesRes || {}
   } finally {
     loading.value = false
   }
@@ -352,6 +523,18 @@ async function scanModels() {
   await refreshAll()
 }
 
+async function submitFeedback() {
+  if (!feedbackForm.value.target_ref.ref_id) return
+  await apiPost('/creator-intelligence/feedback', feedbackForm.value)
+  feedbackForm.value = {
+    feedback_type: 'confirm_recommendation',
+    target_ref: { ref_type: 'recommendation', ref_id: '' },
+    rating: 0,
+    comment: ''
+  }
+  await refreshAll()
+}
+
 function compactCapabilities(capabilities = {}) {
   return Object.entries(capabilities)
     .filter(([, value]) => value === true)
@@ -370,6 +553,14 @@ function formatBytes(value) {
     index += 1
   }
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[index]}`
+}
+
+function formatPercent(value) {
+  return `${Math.round((value || 0) * 100)}%`
+}
+
+function evidenceCount(job) {
+  return (job.progress || []).reduce((total, event) => total + (event.evidence || []).length, 0)
 }
 
 const ToggleMatrix = defineComponent({
@@ -570,7 +761,9 @@ h2 {
 }
 
 .metric-grid,
-.queue-grid {
+.queue-grid,
+.ontology-grid,
+.policy-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
@@ -581,6 +774,9 @@ h2 {
 .creator-row,
 .job-row,
 .memory-row,
+.ontology-panel,
+.explain-row,
+.pressure-row,
 .token-box {
   border: 1px solid var(--glass-border);
   background: var(--bg-secondary);
@@ -640,7 +836,8 @@ h2 {
 
 .creator-grid,
 .job-list,
-.memory-list {
+.memory-list,
+.explain-list {
   display: grid;
   gap: 0.75rem;
 }
@@ -669,6 +866,67 @@ h2 {
 
 .memory-row p {
   margin: 0.25rem 0 0;
+}
+
+.ontology-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.ontology-panel,
+.explain-row,
+.pressure-row,
+.feedback-form {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.panel-heading,
+.pressure-row > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.panel-heading span,
+.explain-row span,
+.explain-row small,
+.pressure-row span,
+.pressure-row small {
+  color: var(--text-secondary);
+}
+
+.label-list {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.ontology-label {
+  border-radius: 999px;
+  padding: 0.25rem 0.5rem;
+  background: rgba(20, 184, 166, 0.14);
+  color: #99f6e4;
+  font-size: 0.78rem;
+}
+
+.feedback-form input,
+.feedback-form select {
+  border: 1px solid var(--glass-border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.pressure-row meter {
+  width: 100%;
+  height: 0.75rem;
+}
+
+.policy-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .tag-row {

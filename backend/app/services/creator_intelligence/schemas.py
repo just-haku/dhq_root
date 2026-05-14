@@ -30,6 +30,8 @@ class JobType(str, Enum):
     STRATEGIC_SYNTHESIS = "strategic_synthesis"
     MODEL_SCAN = "model_scan"
     MODEL_HEALTH_CHECK = "model_health_check"
+    REPLAY_ANALYSIS = "replay_analysis"
+    UPDATE_COGNITIVE_STATE = "update_cognitive_state"
 
 
 class JobPriority(str, Enum):
@@ -55,6 +57,41 @@ class ResultStatus(str, Enum):
     PAUSED = "paused"
 
 
+class ConfidenceSource(str, Enum):
+    HEURISTIC = "heuristic"
+    MODEL_DERIVED = "model_derived"
+    ENSEMBLE_DERIVED = "ensemble_derived"
+    HUMAN_CONFIRMED = "human_confirmed"
+    EXPERIMENTALLY_REINFORCED = "experimentally_reinforced"
+
+
+class FeedbackEventType(str, Enum):
+    CONFIRM_RECOMMENDATION = "confirm_recommendation"
+    REJECT_INTERPRETATION = "reject_interpretation"
+    LABEL_RESONANCE = "label_resonance"
+    PERFORMANCE_MISMATCH = "performance_mismatch"
+    MANUAL_OVERRIDE = "manual_override"
+
+
+class AgentType(str, Enum):
+    ANALYST = "analyst"
+    STRATEGIST = "strategist"
+    CRITIC = "critic"
+    PREDICTOR = "predictor"
+    TREND_OBSERVER = "trend_observer"
+    BROWSER_COGNITION = "browser_cognition"
+
+
+class OntologyDomain(str, Enum):
+    EMOTIONS = "emotions"
+    HOOK_TAXONOMY = "hook_taxonomy"
+    VISUAL_STYLES = "visual_styles"
+    PACING_LABELS = "pacing_labels"
+    CREATOR_ARCHETYPES = "creator_archetypes"
+    AUDIENCE_STATES = "audience_states"
+    CONTENT_GOALS = "content_goals"
+
+
 class SourceReference(BaseModel):
     ref_type: str = Field(..., min_length=1)
     ref_id: str = Field(..., min_length=1)
@@ -68,6 +105,93 @@ class EvidenceItem(BaseModel):
     text: Optional[str] = None
     score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     source_refs: List[SourceReference] = Field(default_factory=list)
+
+
+class OntologyLabel(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    domain: Optional[str] = None
+    version: str = SCHEMA_VERSION
+
+
+class OntologyRegistry(BaseModel):
+    version: str
+    domain: str
+    labels: List[OntologyLabel] = Field(default_factory=list)
+
+
+class OntologyLabelRef(BaseModel):
+    label_id: str
+    domain: Optional[str] = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    source_refs: List[SourceReference] = Field(default_factory=list)
+
+
+class ConfidenceEvidence(BaseModel):
+    source: ConfidenceSource
+    score: float = Field(..., ge=0.0, le=1.0)
+    weight: float = Field(default=1.0, ge=0.0, le=10.0)
+    rationale: Optional[str] = None
+    source_refs: List[SourceReference] = Field(default_factory=list)
+
+
+class ConfidenceCalibrationPolicy(BaseModel):
+    policy_id: str = "default"
+    source_weights: Dict[ConfidenceSource, float] = Field(
+        default_factory=lambda: {
+            ConfidenceSource.HEURISTIC: 0.8,
+            ConfidenceSource.MODEL_DERIVED: 1.0,
+            ConfidenceSource.ENSEMBLE_DERIVED: 1.2,
+            ConfidenceSource.HUMAN_CONFIRMED: 1.6,
+            ConfidenceSource.EXPERIMENTALLY_REINFORCED: 1.5,
+        }
+    )
+    minimum_sources_for_high_confidence: int = Field(default=2, ge=1)
+    high_confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+
+
+class ConfidenceAggregation(BaseModel):
+    policy_id: str = "default"
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence: List[ConfidenceEvidence] = Field(default_factory=list)
+    derivation: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FeedbackCorrection(BaseModel):
+    target_ref: SourceReference
+    original_label: Optional[str] = None
+    corrected_label: Optional[str] = None
+    comment: Optional[str] = None
+
+
+class ManualSemanticOverride(BaseModel):
+    target_ref: SourceReference
+    ontology_labels: List[OntologyLabelRef] = Field(default_factory=list)
+    replacement_summary: Optional[str] = None
+    reason: str
+
+
+class ReinforcementWeight(BaseModel):
+    target_namespace: str
+    weight_delta: float = Field(default=0.0, ge=-1.0, le=1.0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    expires_at: Optional[datetime] = None
+
+
+class HumanFeedbackEvent(BaseModel):
+    schema_version: str = SCHEMA_VERSION
+    event_id: str = Field(default_factory=lambda: uuid4().hex)
+    feedback_type: FeedbackEventType
+    target_ref: SourceReference
+    rating: Optional[float] = Field(default=None, ge=-1.0, le=1.0)
+    correction: Optional[FeedbackCorrection] = None
+    manual_override: Optional[ManualSemanticOverride] = None
+    reinforcement: Optional[ReinforcementWeight] = None
+    comment: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class WorkerCapability(BaseModel):
@@ -120,6 +244,47 @@ class ModelRuntimeStatus(BaseModel):
     error: Optional[str] = None
 
 
+class ModelFingerprint(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    model_name: str
+    model_family: Optional[str] = None
+    quantization: Optional[str] = None
+    context_size: Optional[int] = Field(default=None, ge=1)
+    seed: Optional[int] = None
+    temperature: Optional[float] = Field(default=None, ge=0.0)
+
+
+class RuntimeFingerprint(BaseModel):
+    runtime: str
+    backend: str
+    runtime_version: Optional[str] = None
+    device: Optional[str] = None
+    worker_id: Optional[str] = None
+
+
+class EmbeddingFingerprint(BaseModel):
+    embedding_model: str
+    embedding_version: str
+    tokenizer_version: Optional[str] = None
+    vector_size: Optional[int] = Field(default=None, ge=1)
+    distance: str = "Cosine"
+
+
+class ModelInferenceRecord(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    schema_version: str = SCHEMA_VERSION
+    inference_id: str = Field(default_factory=lambda: uuid4().hex)
+    job_id: Optional[str] = None
+    model_fingerprint: Optional[ModelFingerprint] = None
+    runtime_fingerprint: Optional[RuntimeFingerprint] = None
+    embedding_fingerprint: Optional[EmbeddingFingerprint] = None
+    confidence: Optional[ConfidenceAggregation] = None
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class WorkerHeartbeat(BaseModel):
     model_config = {"protected_namespaces": ()}
 
@@ -139,6 +304,38 @@ class WorkerHealth(BaseModel):
     last_heartbeat: Optional[datetime] = None
     stale_after_seconds: int = 45
     offline_after_seconds: int = 90
+
+
+class WorkerPressureSnapshot(BaseModel):
+    worker_id: str
+    cpu_pressure: float = Field(default=0.0, ge=0.0, le=1.0)
+    gpu_pressure: float = Field(default=0.0, ge=0.0, le=1.0)
+    vram_used_gb: Optional[float] = Field(default=None, ge=0.0)
+    vram_total_gb: Optional[float] = Field(default=None, ge=0.0)
+    thermal_state: str = "nominal"
+    queue_congestion: float = Field(default=0.0, ge=0.0, le=1.0)
+    inference_load: float = Field(default=0.0, ge=0.0, le=1.0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ThermalProtectionPolicy(BaseModel):
+    policy_id: str = "default"
+    hot_states: List[str] = Field(default_factory=lambda: ["hot", "critical"])
+    pause_low_priority_when_hot: bool = True
+    max_gpu_pressure: float = Field(default=0.9, ge=0.0, le=1.0)
+    max_vram_ratio: float = Field(default=0.92, ge=0.0, le=1.0)
+
+
+class ResourceAwareScheduling(BaseModel):
+    eligible: bool
+    reason: str
+    recommended_priority_ceiling: JobPriority = JobPriority.NORMAL
+
+
+class InferenceBackpressure(BaseModel):
+    should_throttle: bool
+    reason: str
+    retry_after_seconds: int = Field(default=0, ge=0)
 
 
 class CapabilityRequirements(BaseModel):
@@ -167,6 +364,36 @@ class JobEnvelope(BaseModel):
     max_attempts: int = Field(default=3, ge=1, le=10)
     attempt: int = Field(default=0, ge=0)
     timeout_seconds: int = Field(default=900, ge=5, le=86400)
+
+
+class CancellationToken(BaseModel):
+    job_id: str
+    token_id: str = Field(default_factory=lambda: uuid4().hex)
+    reason: str = "user_requested"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+
+
+class PriorityEscalationPolicy(BaseModel):
+    urgent_job_types: List[JobType] = Field(default_factory=lambda: [JobType.DRAFT_CRITIQUE])
+    suspend_low_priority_for_urgent: bool = True
+    max_low_priority_runtime_before_checkpoint_seconds: int = 120
+
+
+class ResumeCheckpoint(BaseModel):
+    job_id: str
+    checkpoint_id: str = Field(default_factory=lambda: uuid4().hex)
+    stage: str
+    artifact_refs: List[SourceReference] = Field(default_factory=list)
+    state: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InterruptibleJob(BaseModel):
+    job_id: str
+    interruptible: bool = True
+    safe_checkpoint_stages: List[str] = Field(default_factory=list)
+    latest_checkpoint: Optional[ResumeCheckpoint] = None
 
 
 class JobCreateRequest(BaseModel):
@@ -221,6 +448,61 @@ class ModelScanResult(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class RecommendationEvidence(BaseModel):
+    evidence_id: str = Field(default_factory=lambda: uuid4().hex)
+    evidence_type: str
+    source_refs: List[SourceReference] = Field(default_factory=list)
+    confidence: Optional[ConfidenceAggregation] = None
+    summary: Optional[str] = None
+
+
+class ReasoningReference(BaseModel):
+    ref_type: str
+    ref_id: str
+    role: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class SupportingObservationGraph(BaseModel):
+    nodes: List[Dict[str, Any]] = Field(default_factory=list)
+    edges: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class StrategyLineage(BaseModel):
+    lineage_id: str = Field(default_factory=lambda: uuid4().hex)
+    recommendation_id: str
+    evidence: List[RecommendationEvidence] = Field(default_factory=list)
+    experiments: List[ReasoningReference] = Field(default_factory=list)
+    semantic_packets: List[ReasoningReference] = Field(default_factory=list)
+    trends: List[ReasoningReference] = Field(default_factory=list)
+    memories: List[ReasoningReference] = Field(default_factory=list)
+    routing_decisions: List[ReasoningReference] = Field(default_factory=list)
+    observation_graph: SupportingObservationGraph = Field(default_factory=SupportingObservationGraph)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TemporalWeightPolicy(BaseModel):
+    policy_id: str = "default"
+    trend_half_life_days: float = Field(default=7.0, gt=0)
+    identity_half_life_days: float = Field(default=120.0, gt=0)
+    audience_half_life_days: float = Field(default=30.0, gt=0)
+
+
+class TrendDecayCurve(BaseModel):
+    age_days: float = Field(default=0.0, ge=0.0)
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class IdentityPersistenceCurve(BaseModel):
+    age_days: float = Field(default=0.0, ge=0.0)
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class AudienceShiftWeight(BaseModel):
+    age_days: float = Field(default=0.0, ge=0.0)
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
 class AnalysisToggleSet(BaseModel):
     ocr_timeline: bool = True
     emotional_analysis: bool = True
@@ -250,6 +532,58 @@ class BrowserCognitionPacket(BaseModel):
         if value not in allowed:
             raise ValueError(f"recommendation must be one of {sorted(allowed)}")
         return value
+
+
+class SemanticConsensus(BaseModel):
+    consensus_id: str = Field(default_factory=lambda: uuid4().hex)
+    subject_ref: SourceReference
+    agreed_labels: List[OntologyLabelRef] = Field(default_factory=list)
+    disagreements: List[Dict[str, Any]] = Field(default_factory=list)
+    agreement_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    resolution: str = "pending"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InterpretationDisagreement(BaseModel):
+    disagreement_id: str = Field(default_factory=lambda: uuid4().hex)
+    subject_ref: SourceReference
+    interpretations: List[Dict[str, Any]] = Field(default_factory=list)
+    conflict_labels: List[str] = Field(default_factory=list)
+    severity: str = "medium"
+    requires_human_review: bool = False
+
+
+class MultiModelAgreementScore(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    subject_ref: SourceReference
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    model_count: int = Field(default=0, ge=0)
+    label_overlap: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class AgentCapabilityBoundary(BaseModel):
+    agent_type: AgentType
+    can_scrape: bool = False
+    can_execute_browser_actions: bool = False
+    can_write_memory_directly: bool = False
+    can_modify_routing: bool = False
+    can_alter_embeddings: bool = False
+    allowed_job_types: List[JobType] = Field(default_factory=list)
+
+
+class PermissionScopedExecution(BaseModel):
+    agent_type: AgentType
+    requested_action: str
+    allowed: bool
+    reason: str
+
+
+class RestrictedToolContext(BaseModel):
+    agent_type: AgentType
+    allowed_tools: List[str] = Field(default_factory=list)
+    denied_tools: List[str] = Field(default_factory=list)
+    max_reasoning_depth: int = 3
 
 
 class VideoSemanticPacket(BaseModel):
@@ -314,6 +648,43 @@ class CreatorIdentitySignal(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class ResonanceEstimate(BaseModel):
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    confidence: Optional[ConfidenceAggregation] = None
+    ontology_labels: List[OntologyLabelRef] = Field(default_factory=list)
+
+
+class FatigueEstimate(BaseModel):
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    confidence: Optional[ConfidenceAggregation] = None
+    drivers: List[str] = Field(default_factory=list)
+
+
+class AudienceAlignment(BaseModel):
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    audience_states: List[OntologyLabelRef] = Field(default_factory=list)
+    confidence: Optional[ConfidenceAggregation] = None
+
+
+class IdentityStability(BaseModel):
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    drift_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    confidence: Optional[ConfidenceAggregation] = None
+
+
+class CreatorCognitiveState(BaseModel):
+    schema_version: str = SCHEMA_VERSION
+    creator_id: str
+    creator_mode: str
+    novelty: float = Field(default=0.0, ge=0.0, le=1.0)
+    resonance: ResonanceEstimate = Field(default_factory=ResonanceEstimate)
+    fatigue: FatigueEstimate = Field(default_factory=FatigueEstimate)
+    audience_alignment: AudienceAlignment = Field(default_factory=AudienceAlignment)
+    identity_stability: IdentityStability = Field(default_factory=IdentityStability)
+    source_refs: List[SourceReference] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class MemoryCandidate(BaseModel):
     memory_type: str
     namespace: str
@@ -323,6 +694,92 @@ class MemoryCandidate(BaseModel):
     source_refs: List[SourceReference] = Field(default_factory=list)
     evidence: List[EvidenceItem] = Field(default_factory=list)
     decay_rate: float = Field(default=0.01, ge=0.0, le=1.0)
+    confidence_aggregation: Optional[ConfidenceAggregation] = None
+
+
+class ReasoningDepthPolicy(BaseModel):
+    policy_id: str = "default"
+    max_reasoning_depth: int = Field(default=3, ge=1, le=10)
+    max_synthesis_hops: int = Field(default=4, ge=1, le=20)
+    max_analysis_of_analysis_hops: int = Field(default=1, ge=0, le=5)
+
+
+class RecursiveAnalysisGuard(BaseModel):
+    policy: ReasoningDepthPolicy = Field(default_factory=ReasoningDepthPolicy)
+    visited_refs: List[str] = Field(default_factory=list)
+    current_depth: int = 0
+
+
+class SynthesisBoundary(BaseModel):
+    allowed: bool
+    reason: str
+    depth: int
+    hop_count: int
+
+
+class SandboxWorkspace(BaseModel):
+    workspace_id: str = Field(default_factory=lambda: uuid4().hex)
+    owner: Optional[str] = None
+    creator_id: Optional[str] = None
+    persistent: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class HypotheticalStrategy(BaseModel):
+    strategy_id: str = Field(default_factory=lambda: uuid4().hex)
+    workspace_id: str
+    title: str
+    assumptions: List[str] = Field(default_factory=list)
+    expected_effects: Dict[str, Any] = Field(default_factory=dict)
+    confidence: Optional[ConfidenceAggregation] = None
+
+
+class SimulationContext(BaseModel):
+    workspace_id: str
+    source_refs: List[SourceReference] = Field(default_factory=list)
+    constraints: Dict[str, Any] = Field(default_factory=dict)
+    ontology_labels: List[OntologyLabelRef] = Field(default_factory=list)
+
+
+class NonPersistentReasoning(BaseModel):
+    workspace_id: str
+    output: Dict[str, Any] = Field(default_factory=dict)
+    may_write_memory: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ObservationNode(BaseModel):
+    node_id: str
+    node_type: str = "observation"
+    source_ref: SourceReference
+    summary: Optional[str] = None
+
+
+class InferenceNode(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    node_id: str
+    node_type: str = "inference"
+    model_fingerprint: Optional[ModelFingerprint] = None
+    runtime_fingerprint: Optional[RuntimeFingerprint] = None
+    summary: str
+    confidence: Optional[ConfidenceAggregation] = None
+
+
+class EvidenceLink(BaseModel):
+    from_node: str
+    to_node: str
+    link_type: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class AnalysisProvenanceGraph(BaseModel):
+    graph_id: str = Field(default_factory=lambda: uuid4().hex)
+    subject_ref: SourceReference
+    observations: List[ObservationNode] = Field(default_factory=list)
+    inferences: List[InferenceNode] = Field(default_factory=list)
+    links: List[EvidenceLink] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 def model_to_dict(model: BaseModel) -> Dict[str, Any]:

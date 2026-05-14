@@ -392,3 +392,217 @@ class CIAgentOutput(Document):
             "warnings": self.warnings or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class CIHumanFeedbackEvent(Document):
+    event_id = StringField(required=True, unique=True)
+    feedback_type = StringField(required=True)
+    target_ref = DictField(required=True)
+    rating = FloatField()
+    correction = DictField()
+    manual_override = DictField()
+    reinforcement = DictField()
+    comment = StringField()
+    created_by = ReferenceField(User)
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_human_feedback", "indexes": ["event_id", "feedback_type", "created_by", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "event_id": self.event_id,
+            "feedback_type": self.feedback_type,
+            "target_ref": self.target_ref or {},
+            "rating": self.rating,
+            "correction": self.correction or {},
+            "manual_override": self.manual_override or {},
+            "reinforcement": self.reinforcement or {},
+            "comment": self.comment,
+            "created_by": self.created_by.username if self.created_by else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CIStrategyLineageRecord(Document):
+    lineage_id = StringField(required=True, unique=True)
+    recommendation_id = StringField(required=True)
+    evidence = ListField(DictField())
+    experiments = ListField(DictField())
+    semantic_packets = ListField(DictField())
+    trends = ListField(DictField())
+    memories = ListField(DictField())
+    routing_decisions = ListField(DictField())
+    observation_graph = DictField()
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_strategy_lineage", "indexes": ["lineage_id", "recommendation_id", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "lineage_id": self.lineage_id,
+            "recommendation_id": self.recommendation_id,
+            "evidence": self.evidence or [],
+            "experiments": self.experiments or [],
+            "semantic_packets": self.semantic_packets or [],
+            "trends": self.trends or [],
+            "memories": self.memories or [],
+            "routing_decisions": self.routing_decisions or [],
+            "observation_graph": self.observation_graph or {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CIWorkerPressureRecord(Document):
+    worker_id = StringField(required=True)
+    cpu_pressure = FloatField(default=0.0)
+    gpu_pressure = FloatField(default=0.0)
+    vram_used_gb = FloatField()
+    vram_total_gb = FloatField()
+    thermal_state = StringField(default="nominal")
+    queue_congestion = FloatField(default=0.0)
+    inference_load = FloatField(default=0.0)
+    scheduling = DictField()
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_worker_pressure", "indexes": ["worker_id", "thermal_state", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "worker_id": self.worker_id,
+            "cpu_pressure": self.cpu_pressure,
+            "gpu_pressure": self.gpu_pressure,
+            "vram_used_gb": self.vram_used_gb,
+            "vram_total_gb": self.vram_total_gb,
+            "thermal_state": self.thermal_state,
+            "queue_congestion": self.queue_congestion,
+            "inference_load": self.inference_load,
+            "scheduling": self.scheduling or {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CIModelInferenceRecord(Document):
+    inference_id = StringField(required=True, unique=True)
+    job_id = StringField()
+    model_fingerprint = DictField()
+    runtime_fingerprint = DictField()
+    embedding_fingerprint = DictField()
+    confidence = DictField()
+    diagnostics = DictField()
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_model_inferences", "indexes": ["inference_id", "job_id", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "inference_id": self.inference_id,
+            "job_id": self.job_id,
+            "model_fingerprint": self.model_fingerprint or {},
+            "runtime_fingerprint": self.runtime_fingerprint or {},
+            "embedding_fingerprint": self.embedding_fingerprint or {},
+            "confidence": self.confidence or {},
+            "diagnostics": self.diagnostics or {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CISemanticConsensusRecord(Document):
+    consensus_id = StringField(required=True, unique=True)
+    subject_ref = DictField(required=True)
+    agreed_labels = ListField(DictField())
+    disagreements = ListField(DictField())
+    agreement_score = FloatField(default=0.0)
+    resolution = StringField(default="pending")
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_semantic_consensus", "indexes": ["consensus_id", "agreement_score", "resolution", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "consensus_id": self.consensus_id,
+            "subject_ref": self.subject_ref or {},
+            "agreed_labels": self.agreed_labels or [],
+            "disagreements": self.disagreements or [],
+            "agreement_score": self.agreement_score,
+            "resolution": self.resolution,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CICreatorCognitiveStateRecord(Document):
+    creator_id = StringField(required=True)
+    creator_mode = StringField(required=True)
+    novelty = FloatField(default=0.0)
+    resonance = DictField()
+    fatigue = DictField()
+    audience_alignment = DictField()
+    identity_stability = DictField()
+    source_refs = ListField(DictField())
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_creator_cognitive_states", "indexes": ["creator_id", "creator_mode", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "creator_id": self.creator_id,
+            "creator_mode": self.creator_mode,
+            "novelty": self.novelty,
+            "resonance": self.resonance or {},
+            "fatigue": self.fatigue or {},
+            "audience_alignment": self.audience_alignment or {},
+            "identity_stability": self.identity_stability or {},
+            "source_refs": self.source_refs or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CIProvenanceGraphRecord(Document):
+    graph_id = StringField(required=True, unique=True)
+    subject_ref = DictField(required=True)
+    observations = ListField(DictField())
+    inferences = ListField(DictField())
+    links = ListField(DictField())
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_provenance_graphs", "indexes": ["graph_id", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "graph_id": self.graph_id,
+            "subject_ref": self.subject_ref or {},
+            "observations": self.observations or [],
+            "inferences": self.inferences or [],
+            "links": self.links or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CISandboxWorkspaceRecord(Document):
+    workspace_id = StringField(required=True, unique=True)
+    owner = ReferenceField(User)
+    creator_id = StringField()
+    persistent = BooleanField(default=False)
+    context = DictField()
+    outputs = ListField(DictField())
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {"collection": "ci_sandbox_workspaces", "indexes": ["workspace_id", "owner", "creator_id", "created_at"]}
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "workspace_id": self.workspace_id,
+            "owner": self.owner.username if self.owner else None,
+            "creator_id": self.creator_id,
+            "persistent": self.persistent,
+            "context": self.context or {},
+            "outputs": self.outputs or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

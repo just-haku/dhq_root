@@ -16,6 +16,7 @@ from app.services.creator_intelligence.schemas import (
     ResultStatus,
     WorkerCapability,
     WorkerHeartbeat,
+    WorkerPressureSnapshot,
     WorkerRegistration,
     model_to_dict,
 )
@@ -66,6 +67,41 @@ async def heartbeat_loop(ws, worker_id: str):
         )
         await send_json(ws, {"message_type": "heartbeat", "payload": model_to_dict(heartbeat)})
         await asyncio.sleep(15)
+
+
+def _env_float(name: str, default: float = 0.0) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def collect_pressure_snapshot(worker_id: str, args) -> WorkerPressureSnapshot:
+    cpu_pressure = 0.0
+    try:
+        load_average = os.getloadavg()[0]
+        cpu_count = os.cpu_count() or 1
+        cpu_pressure = max(0.0, min(1.0, load_average / cpu_count))
+    except (AttributeError, OSError):
+        cpu_pressure = 0.0
+
+    return WorkerPressureSnapshot(
+        worker_id=worker_id,
+        cpu_pressure=cpu_pressure,
+        gpu_pressure=max(0.0, min(1.0, _env_float("DHQ_WORKER_GPU_PRESSURE"))),
+        vram_used_gb=_env_float("DHQ_WORKER_VRAM_USED_GB") or None,
+        vram_total_gb=args.vram_gb,
+        thermal_state=os.environ.get("DHQ_WORKER_THERMAL_STATE", "nominal"),
+        queue_congestion=max(0.0, min(1.0, _env_float("DHQ_WORKER_QUEUE_CONGESTION"))),
+        inference_load=max(0.0, min(1.0, _env_float("DHQ_WORKER_INFERENCE_LOAD"))),
+    )
+
+
+async def pressure_loop(ws, worker_id: str, args):
+    while True:
+        snapshot = collect_pressure_snapshot(worker_id, args)
+        await send_json(ws, {"message_type": "pressure", "payload": model_to_dict(snapshot)})
+        await asyncio.sleep(args.pressure_interval)
 
 
 async def execute_job(job: Dict[str, Any], args) -> JobResult:
@@ -159,6 +195,7 @@ async def worker_loop(args):
         await send_json(ws, {"message_type": "register", "payload": model_to_dict(registration)})
 
         heartbeat_task = None
+        pressure_task = None
         try:
             while True:
                 raw = await ws.recv()
@@ -167,9 +204,14 @@ async def worker_loop(args):
 
                 if message_type == "registered":
                     heartbeat_task = asyncio.create_task(heartbeat_loop(ws, args.worker_id))
+                    if args.pressure_interval > 0:
+                        pressure_task = asyncio.create_task(pressure_loop(ws, args.worker_id, args))
                     await send_json(ws, {"message_type": "claim_request"})
 
                 elif message_type == "heartbeat_ack":
+                    continue
+
+                elif message_type == "pressure_ack":
                     continue
 
                 elif message_type == "no_job":
@@ -199,6 +241,8 @@ async def worker_loop(args):
         finally:
             if heartbeat_task:
                 heartbeat_task.cancel()
+            if pressure_task:
+                pressure_task.cancel()
 
 
 def parse_args():
@@ -211,6 +255,7 @@ def parse_args():
     parser.add_argument("--model-root", action="append", dest="model_roots", default=[])
     parser.add_argument("--validate-hashes", action="store_true")
     parser.add_argument("--poll-interval", type=float, default=2.0)
+    parser.add_argument("--pressure-interval", type=float, default=30.0)
     parser.add_argument("--gpu", action="store_true")
     parser.add_argument("--multimodal", action="store_true")
     parser.add_argument("--ocr", action="store_true")
