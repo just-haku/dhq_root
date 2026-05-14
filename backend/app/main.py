@@ -144,7 +144,7 @@ async def health_check():
     return {"status": "healthy", "service": "DHQ Backend"}
 
 # Import and include routers
-from app.api import auth, admin, hub, arcade, gifts, gifts_management, activity, monitoring, user_management, ordering, ordering_enhanced, organic_ordering, smart_collaboration, kpi_bonus, drive, test_api, gcode_generator, economy, order_center, mock_api, email_hub, prompt_api, virus_scan, ai_chat, system_config, vault_api, public_api, task_api, notification_api, shop_api
+from app.api import auth, admin, hub, arcade, gifts, gifts_management, activity, monitoring, user_management, ordering, ordering_enhanced, organic_ordering, smart_collaboration, kpi_bonus, drive, test_api, gcode_generator, economy, order_center, mock_api, email_hub, prompt_api, virus_scan, ai_chat, system_config, vault_api, public_api, task_api, notification_api, shop_api, creator_intelligence
 # Standard API routes
 app.include_router(vault_api.router, prefix="/api", tags=["vault"])
 app.include_router(virus_scan.router, prefix="/api/scan", tags=["virus-scan"])
@@ -172,6 +172,7 @@ app.include_router(system_config.router, prefix="/api/system", tags=["system-con
 app.include_router(task_api.router, prefix="/api", tags=["tasks"])
 app.include_router(notification_api.router, prefix="/api", tags=["notifications"])
 app.include_router(shop_api.router, prefix="/api", tags=["shop"])
+app.include_router(creator_intelligence.router, prefix="/api/creator-intelligence", tags=["creator-intelligence"])
 
 # Game routes
 app.include_router(wordle.router, prefix="/api/games/wordle", tags=["games-wordle"])

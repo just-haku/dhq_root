@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     
     # Vault
     vault_master_key: str
+
+    # Creator Intelligence
+    CI_WORKER_REGISTRATION_TOKEN: Optional[str] = None
+    CI_MODEL_SCAN_ROOTS: str = "/home/haku/models,/home/haku/Models,/models"
+    CI_QDRANT_URL: str = "http://localhost:6333"
+    CI_QDRANT_COLLECTION: str = "dhq_creator_intelligence"
+    CI_WORKER_HEARTBEAT_STALE_SECONDS: int = 45
+    CI_WORKER_HEARTBEAT_OFFLINE_SECONDS: int = 90
     
     class Config:
         env_file = ".env"

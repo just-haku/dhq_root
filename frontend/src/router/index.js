@@ -117,6 +117,12 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
+        path: '/creator-intelligence',
+        name: 'CreatorIntelligence',
+        component: () => import('../views/CreatorIntelligence.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: '/reports',
         name: 'Reports',
         component: () => import('../views/Reports.vue'),

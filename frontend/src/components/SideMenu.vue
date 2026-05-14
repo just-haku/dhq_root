@@ -189,6 +189,7 @@ const logout = () => {
 const userRoutes = computed(() => [
   { name: t('sidebar.drive'), icon: 'fas fa-hdd', path: '/drive' },
   { name: t('sidebar.collaboration'), icon: 'fas fa-users-cog', path: '/collaboration' },
+  { name: 'Creator Intelligence', icon: 'fas fa-brain', path: '/creator-intelligence' },
   { name: t('sidebar.order_center'), icon: 'fas fa-box', path: '/order-center' },
   { name: t('sidebar.cnc'), icon: 'fas fa-drafting-compass', path: '/gcode-generator' },
   { name: t('sidebar.task_center'), icon: 'fas fa-tasks', path: '/tasks' },
