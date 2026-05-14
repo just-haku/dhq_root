@@ -13,6 +13,15 @@ Creator Intelligence is a distributed, typed subsystem for short-form creator re
 - [Frontend Navigation](frontend-navigation.md): Vue route and dashboard modules.
 - [Security Audit](security-audit.md): current DHQ risks and remediation plan.
 - [Execution Phases](execution-phases.md): phased implementation and acceptance gates.
+- [Ontology Design](ontology-design.md): canonical labels for stable interpretation.
+- [Confidence Calibration](confidence-calibration.md): reproducible confidence derivation.
+- [Semantic Consensus](semantic-consensus.md): model disagreement handling.
+- [Resource Pressure](resource-pressure-management.md): inference node protection.
+- [Cancellation Flows](cancellation-flows.md): interruption and priority preemption.
+- [Provenance Graphs](provenance-graphs.md): traceable conclusion ancestry.
+- [Cognitive State](cognitive-state-lifecycle.md): creator evolution snapshots.
+- [Reinforcement Boundaries](reinforcement-boundaries.md): human feedback without memory bypass.
+- [Anti-Recursion Strategy](anti-recursion-strategy.md): synthesis depth and loop guards.
 
 ## Design Commitments
 

@@ -1,0 +1,18 @@
+version: 1.0
+domain: creator_archetypes
+labels:
+  - id: archetype:soft_academic
+    name: Soft Academic
+    description: Gentle study-oriented identity with calm aspiration.
+  - id: archetype:practical_mentor
+    name: Practical Mentor
+    description: Clear advice, grounded expertise, tactical teaching.
+  - id: archetype:reflective_diary
+    name: Reflective Diary
+    description: Personal narrative, emotional processing, vulnerable tone.
+  - id: archetype:trend_translator
+    name: Trend Translator
+    description: Converts trends into audience-relevant formats.
+  - id: archetype:aesthetic_curator
+    name: Aesthetic Curator
+    description: Strong visual taste, mood boards, polished atmosphere.

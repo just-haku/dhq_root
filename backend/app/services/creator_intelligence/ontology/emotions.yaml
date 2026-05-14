@@ -1,0 +1,21 @@
+version: 1.0
+domain: emotions
+labels:
+  - id: emotion:quiet_ambition
+    name: Quiet Ambition
+    description: Calm forward momentum, self-improvement, restrained aspiration.
+  - id: emotion:comfort
+    name: Comfort
+    description: Warmth, reassurance, softness, psychological safety.
+  - id: emotion:burnout
+    name: Burnout
+    description: Exhaustion, depleted motivation, cognitive overload.
+  - id: emotion:curiosity
+    name: Curiosity
+    description: Open question, unresolved tension, desire to inspect.
+  - id: emotion:awe
+    name: Awe
+    description: Scale, beauty, surprise, high salience wonder.
+  - id: emotion:loneliness
+    name: Loneliness
+    description: Isolation, distance, quiet unmet connection.

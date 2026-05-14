@@ -1,0 +1,18 @@
+version: 1.0
+domain: content_goals
+labels:
+  - id: goal:awareness
+    name: Awareness
+    description: Increase reach and surface creator identity.
+  - id: goal:trust_building
+    name: Trust Building
+    description: Increase credibility, warmth, and repeated viewing.
+  - id: goal:conversion
+    name: Conversion
+    description: Drive a specific action or decision.
+  - id: goal:community_signal
+    name: Community Signal
+    description: Invite belonging, comments, or shared identity.
+  - id: goal:experiment_learning
+    name: Experiment Learning
+    description: Test a hypothesis and measure directional outcome.

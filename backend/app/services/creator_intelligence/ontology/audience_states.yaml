@@ -1,0 +1,18 @@
+version: 1.0
+domain: audience_states
+labels:
+  - id: audience:seeking_motivation
+    name: Seeking Motivation
+    description: Wants activation, momentum, or renewed discipline.
+  - id: audience:overwhelmed
+    name: Overwhelmed
+    description: High cognitive load and desire for simplification.
+  - id: audience:identity_building
+    name: Identity Building
+    description: Looking for self-concept reinforcement.
+  - id: audience:comparison_sensitive
+    name: Comparison Sensitive
+    description: Vulnerable to aspirational content becoming discouraging.
+  - id: audience:ready_to_act
+    name: Ready To Act
+    description: Prepared for concrete next steps or conversion.

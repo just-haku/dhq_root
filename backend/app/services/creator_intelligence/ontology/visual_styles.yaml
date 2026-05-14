@@ -1,0 +1,21 @@
+version: 1.0
+domain: visual_styles
+labels:
+  - id: visual:warm_minimal
+    name: Warm Minimal
+    description: Clean composition, warm light, low clutter.
+  - id: visual:high_density_overlay
+    name: High Density Overlay
+    description: Heavy text overlays, stickers, annotations, or dense UI.
+  - id: visual:close_framing
+    name: Close Framing
+    description: Face or object occupies most of frame.
+  - id: visual:desk_study
+    name: Desk Study
+    description: Study setup, stationery, desk, laptop, books.
+  - id: visual:cinematic_soft
+    name: Cinematic Soft
+    description: Shallow focus, smooth motion, soft contrast.
+  - id: visual:raw_handheld
+    name: Raw Handheld
+    description: Imperfect mobile capture, casual camera motion.

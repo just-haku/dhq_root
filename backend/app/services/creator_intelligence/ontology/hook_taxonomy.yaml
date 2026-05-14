@@ -1,0 +1,21 @@
+version: 1.0
+domain: hook_taxonomy
+labels:
+  - id: hook:open_loop_question
+    name: Open Loop Question
+    description: Starts with an unresolved question or promise.
+  - id: hook:identity_callout
+    name: Identity Callout
+    description: Directly names the audience identity or pain point.
+  - id: hook:pattern_interrupt
+    name: Pattern Interrupt
+    description: Breaks expected visual, verbal, or pacing pattern.
+  - id: hook:before_after
+    name: Before After
+    description: Establishes contrast between starting and desired states.
+  - id: hook:confession
+    name: Confession
+    description: Vulnerable or insider admission that creates intimacy.
+  - id: hook:micro_tutorial
+    name: Micro Tutorial
+    description: Quickly promises a learnable tactical outcome.

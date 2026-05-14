@@ -1,0 +1,18 @@
+version: 1.0
+domain: pacing_labels
+labels:
+  - id: pacing:rapid_cuts
+    name: Rapid Cuts
+    description: Frequent cuts and high event density.
+  - id: pacing:slow_burn
+    name: Slow Burn
+    description: Low cut rate, gradual reveal, delayed payoff.
+  - id: pacing:front_loaded
+    name: Front Loaded
+    description: Most novelty and information appears in first seconds.
+  - id: pacing:dead_zone
+    name: Dead Zone
+    description: Segment with low novelty, motion, or information change.
+  - id: pacing:loopable
+    name: Loopable
+    description: Ending naturally returns viewer to beginning.
